@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]   # change if your default branch isn't 'main'
+    branches: [ main ]   # change if your default branch is not 'main'
   workflow_dispatch:
 
 permissions:
@@ -25,16 +25,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
 
-      # Use npm install (more forgiving than npm ci if lockfile is missing/mismatched)
-      - name: Install deps
-        run: npm install
+      # Optional: upgrade npm to latest to avoid optional-deps bugs
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
+      # Clean install to avoid the Rollup optional-deps issue
+      - name: Clean install
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
+
+      # Build (force Rollup to use non-native build)
       - name: Build
+        env:
+          ROLLUP_SKIP_NODEJS_NATIVE: '1'
         run: npm run build
 
-      # Optional SPA fallback: 404 -> index.html
+      # SPA fallback so 404s load index.html (optional)
       - name: Add 404.html
         run: cp dist/index.html dist/404.html
 
