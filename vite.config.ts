@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// ⬇️ IMPORTANT: set this to '/<REPO_NAME>/' (leading & trailing slashes)
 export default defineConfig({
-  base: '/babebattle/',
+  base: '/babebattle/',   // ← must match the repo name exactly
   plugins: [react()],
 })
