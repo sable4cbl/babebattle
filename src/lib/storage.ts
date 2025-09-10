@@ -1,5 +1,5 @@
 import type { BabeCard, EffectCard } from "../types/cards";
-const LS_KEY = "card-game-tool-deck-v1";
+const LS_KEY = "card-game-tool-deck-v0.2";
 
 export type DeckState = { babes: BabeCard[]; effects: EffectCard[] };
 
