@@ -1,15 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { EffectCard } from "../types/cards";
+import { PlayedEffect } from "../types/cards";
 import { useGifLibrary } from "../media/GifLibrary";
 
-export default function EffectBadge({
+/**
+ * Visual tile for an effect that is ALREADY in play.
+ * - Supports "selected" ring to indicate targeting mode
+ * - Click to select/deselect (parent provides onSelect)
+ * - Clean image-only style when GIF exists; fallback ribbon when missing
+ */
+export default function PlayedEffectBadge({
   e,
-  disabled,
-  onClick,
+  selected,
+  onSelect,
 }: {
-  e: EffectCard;
-  disabled?: boolean;
-  onClick?: () => void;
+  e: PlayedEffect;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
   const { getEffectGifURL, version } = useGifLibrary();
   const [gifUrl, setGifUrl] = useState<string | null>(null);
@@ -44,12 +50,11 @@ export default function EffectBadge({
     <div
       className={[
         "relative rounded-xl overflow-hidden border bg-white",
-        "w-[100px] h-[140px]",
-        "flex-none",
+        "w-[100px] h-[140px] flex-none",
         "transition-shadow hover:shadow-md cursor-pointer",
-        disabled ? "opacity-50 pointer-events-none" : "",
+        selected ? "ring-2 ring-blue-400" : "",
       ].join(" ")}
-      onClick={disabled ? undefined : onClick}
+      onClick={onSelect}
       role="button"
       title={e.description || e.name}
     >

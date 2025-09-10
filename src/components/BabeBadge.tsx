@@ -1,45 +1,75 @@
-import React from "react";
-import { BabeCard, PlayedBabe } from "../types/cards";
-import Pill from "./ui/Pill";
+import React, { useEffect, useState } from "react";
+import { BabeCard } from "../types/cards";
+import { useGifLibrary } from "../media/GifLibrary";
 
 export default function BabeBadge({
   b,
   score,
   muted,
+  selected,
   onClick,
+  small = false,
 }: {
-  b: PlayedBabe | BabeCard;
+  b: BabeCard;
   score?: number;
   muted?: boolean;
+  selected?: boolean;
   onClick?: () => void;
+  small?: boolean;
 }) {
-  const showScore = typeof score === "number";
+  const { getGifURLByName, makeBabeGifName, version } = useGifLibrary();
+  const [gifUrl, setGifUrl] = useState<string | null>(null);
+  const expectedFilename = makeBabeGifName(b.type, b.name, b.gifName);
+
+  useEffect(() => {
+    let alive = true;
+    let prev: string | null = null;
+    (async () => {
+      const url = await getGifURLByName(expectedFilename);
+      if (!alive) return;
+      if (prev && prev !== url) {
+        try { URL.revokeObjectURL(prev); } catch {}
+      }
+      prev = url;
+      setGifUrl(url);
+    })();
+    return () => {
+      alive = false;
+      if (prev) {
+        try { URL.revokeObjectURL(prev); } catch {}
+      }
+    };
+  }, [expectedFilename, getGifURLByName, version]);
+
+  const tileClass = small ? "w-[100px] h-[140px]" : "w-[175px] h-[245px]";
 
   return (
     <div
-      className={`flex items-center gap-2 ${
-        onClick ? "cursor-pointer" : ""
-      } ${muted ? "opacity-40" : ""}`}
+      className={[
+        "relative rounded-xl overflow-hidden border bg-white",
+        tileClass,
+        "flex-none",
+        "transition-shadow hover:shadow-md cursor-pointer",
+        muted ? "opacity-40" : "",
+        selected ? "ring-2 ring-blue-400" : "",
+      ].join(" ")}
       onClick={onClick}
+      role="button"
+      title={`${b.name} • ${b.type} • Base ${b.baseScore}`}
     >
-      {"img" in b && b.img ? (
-        <img
-          src={b.img}
-          alt={b.name}
-          className="w-10 h-10 object-cover rounded-xl border"
-        />
+      {gifUrl ? (
+        <img src={gifUrl} alt={b.name} className="w-full h-full object-cover" loading="lazy" />
       ) : (
-        <div className="w-10 h-10 rounded-xl bg-gray-100 border flex items-center justify-center text-xs">
-          IMG
+        <div className="w-full h-full bg-gray-200 flex items-end justify-stretch">
+          <div className="w-full bg-gray-900/80 text-white p-2">
+            <div className="text-xs font-semibold truncate">{b.name}</div>
+            <div className="text-white/80 text-[11px]">
+              {b.type} • Base {b.baseScore}
+              {typeof score === "number" && score !== b.baseScore ? ` → ${score}` : ""}
+            </div>
+          </div>
         </div>
       )}
-      <div>
-        <div className="font-medium leading-tight">{b.name}</div>
-        <div className="text-xs text-gray-600">
-          <Pill>{b.type}</Pill> <span className="ml-2">Base {b.baseScore}</span>
-          {showScore && <span className="ml-2">→ {score}</span>}
-        </div>
-      </div>
     </div>
   );
 }
