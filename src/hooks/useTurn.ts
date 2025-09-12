@@ -1,179 +1,176 @@
-import { useMemo, useState } from "react";
-import type {
-  PlayedBabe,
-  PlayedEffect,
-  BabeCard,
-  EffectCard,
-} from "../types/cards";
-import { DEFAULT_LIMITS } from "../data/constants";
-import { uid } from "../lib/uid";
+import { useCallback, useMemo, useState } from "react";
+import type { BabeCard } from "../types/cards";
+import type { EffectScript } from "../types/effects";
+import { uid } from "../utils/uid";
 
-export type DiscardState = { babes: BabeCard[]; effects: EffectCard[] };
+type PlayedEffect = { id: string; script: EffectScript };
 
-export type TurnSchedule = {
-  addNext?: number;
-  addTurn2?: number;
-  multNext?: number;
-};
-
-function reorder<T>(arr: T[], from: number, to: number): T[] {
-  const copy = [...arr];
-  const [moved] = copy.splice(from, 1);
-  copy.splice(to, 0, moved);
-  return copy;
-}
-
-export function useTurn() {
-  const [turnNumber, setTurnNumber] = useState(1);
-  const [playedBabes, setPlayedBabes] = useState<PlayedBabe[]>([]);
-  const [playedEffects, setPlayedEffects] = useState<PlayedEffect[]>([]);
-  const [discard, setDiscard] = useState<DiscardState>({ babes: [], effects: [] });
-  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
-
-  const [pendingNext, setPendingNext] = useState<TurnSchedule>({});
-  const [pendingTurn2, setPendingTurn2] = useState<TurnSchedule>({});
-
-  const computedLimits = useMemo(() => {
-    const base = { ...DEFAULT_LIMITS };
-    let b: number = base.babes;
-    let e: number = base.effects;
-
-    for (const x of playedEffects) {
-      if (x.kind === "extra-plays") {
-        b += x.extraBabes ?? 0;
-        e += x.extraEffects ?? 0;
-      }
-      if (x.kind === "set-babe-limit" && x.setBabeLimitTo != null) {
-        b = Math.max(b, x.setBabeLimitTo);
-      }
+type TurnApiConfig =
+  | {
+      getDeckBabes: () => BabeCard[];
+      setDeckBabes: (updater: (prev: BabeCard[]) => BabeCard[]) => void;
+      getDeckEffects: () => EffectScript[];
+      setDeckEffects: (updater: (prev: EffectScript[]) => EffectScript[]) => void;
     }
-    return { babes: b, effects: e };
-  }, [playedEffects]);
+  | undefined;
 
-  const strokesThisTurn = useMemo(
-    () =>
-      (playedBabes.reduce((a, b) => a + (b.strokesCost ?? 0), 0) +
-        playedEffects.reduce((a, e) => a + (e.strokesCost ?? 0), 0)),
-    [playedBabes, playedEffects]
+const DEFAULT_LIMITS = { babes: 2, effects: 2 };
+
+export function useTurn(cfg?: TurnApiConfig) {
+  // zones (this component owns Play + Discard; parent owns Deck)
+  const [playedBabes, setPlayedBabes] = useState<BabeCard[]>([]);
+  const [playedEffects, setPlayedEffects] = useState<PlayedEffect[]>([]);
+  const [discard, setDiscard] = useState<{ babes: BabeCard[]; effects: EffectScript[] }>({
+    babes: [],
+    effects: [],
+  });
+
+  const [turnNumber, setTurnNumber] = useState(1);
+  const [strokesThisTurn, setStrokesThisTurn] = useState(0);
+  const computedLimits = DEFAULT_LIMITS;
+
+  // score (base only for now)
+  const finalScore = useMemo(
+    () => playedBabes.reduce((s, b) => s + (b.baseScore || 0), 0),
+    [playedBabes]
   );
 
-  const canPlayBabe = playedBabes.length < computedLimits.babes;
+  // --- Deck helpers ---
+  const deckRemoveBabe = useCallback(
+    (id: string) => cfg?.setDeckBabes(prev => prev.filter(b => b.id !== id)),
+    [cfg]
+  );
+  const deckAddBabe = useCallback(
+    (card: BabeCard) =>
+      cfg?.setDeckBabes(prev => (prev.some(b => b.id === card.id) ? prev : [...prev, card])),
+    [cfg]
+  );
 
-  const playBabe = (b: BabeCard) => {
-    if (playedBabes.length >= computedLimits.babes) return;
-    setPlayedBabes((p) => [...p, { ...b, playId: uid() }]);
-  };
-  const playBabeLimited = (b: BabeCard) => {
-    if (playedBabes.length >= computedLimits.babes) return null;
-    const pb: PlayedBabe = { ...b, playId: uid() };
-    setPlayedBabes((p) => [...p, pb]);
-    return pb;
-  };
-  const addPlayedBabeDirect = (b: BabeCard) => {
-    const pb: PlayedBabe = { ...b, playId: uid() };
-    setPlayedBabes((p) => [...p, pb]);
-    return pb;
-  };
+  const deckRemoveEffect = useCallback(
+    (id: string) => cfg?.setDeckEffects(prev => prev.filter(e => e.id !== id)),
+    [cfg]
+  );
+  const deckAddEffect = useCallback(
+    (card: EffectScript) =>
+      cfg?.setDeckEffects(prev => (prev.some(e => e.id === card.id) ? prev : [...prev, card])),
+    [cfg]
+  );
 
-  /** RETURN the newly played effect so caller can set selection immediately. */
-  const playEffect = (e: EffectCard): PlayedEffect | null => {
-    if (playedEffects.length >= computedLimits.effects && !e.ignoreEffectLimit) return null;
-    const pe: PlayedEffect = { ...e, playId: uid() };
-    setPlayedEffects((p) => [...p, pe]);
-    return pe;
-  };
+  // --- Actions: play/remove ---
+  const playBabe = useCallback(
+    (b: BabeCard) => {
+      setPlayedBabes(prev => (prev.some(x => x.id === b.id) ? prev : [...prev, b]));
+      deckRemoveBabe(b.id); // hide from deck immediately
+    },
+    [deckRemoveBabe]
+  );
 
-  const removePlayedBabe = (playId: string) =>
-    setPlayedBabes((p) => p.filter((x) => x.playId !== playId));
-  const removePlayedEffect = (playId: string) =>
-    setPlayedEffects((p) => p.filter((x) => x.playId !== playId));
+  const removePlayedBabe = useCallback(
+    (id: string) => {
+      setPlayedBabes(prev => {
+        const ix = prev.findIndex(x => x.id === id);
+        if (ix === -1) return prev;
+        const b = prev[ix];
+        deckAddBabe(b); // back to deck
+        const next = prev.slice();
+        next.splice(ix, 1);
+        return next;
+      });
+    },
+    [deckAddBabe]
+  );
 
-  const bindEffect = (playId: string, updates: Partial<PlayedEffect>) =>
-    setPlayedEffects((p) => p.map((x) => (x.playId === playId ? { ...x, ...updates } : x)));
+  const playEffect = useCallback(
+    (e: EffectScript) => {
+      setPlayedEffects(prev => [...prev, { id: uid(), script: e }]);
+      deckRemoveEffect(e.id); // hide from deck immediately
+    },
+    [deckRemoveEffect]
+  );
 
-  const reorderPlayedEffects = (fromIndex: number, toIndex: number) =>
-    setPlayedEffects((p) => reorder(p, fromIndex, toIndex));
+  const removePlayedEffect = useCallback(
+    (id: string) => {
+      setPlayedEffects(prev => {
+        const ix = prev.findIndex(x => x.id === id);
+        if (ix === -1) return prev;
+        deckAddEffect(prev[ix].script); // back to deck
+        const next = prev.slice();
+        next.splice(ix, 1);
+        return next;
+      });
+    },
+    [deckAddEffect]
+  );
 
-  const resetTurn = () => {
+  // --- Turn lifecycle ---
+  const resetTurn = useCallback(() => {
+    // Play -> Deck
+    setPlayedBabes(prev => {
+      prev.forEach(deckAddBabe);
+      return [];
+    });
+    setPlayedEffects(prev => {
+      prev.forEach(pe => deckAddEffect(pe.script));
+      return [];
+    });
+    setStrokesThisTurn(0);
+  }, [deckAddBabe, deckAddEffect]);
+
+  const endTurn = useCallback(() => {
+    // Play -> Discard
+    setDiscard(prev => ({
+      babes: [...prev.babes, ...playedBabes],
+      effects: [...prev.effects, ...playedEffects.map(pe => pe.script)],
+    }));
+    // clear play
     setPlayedBabes([]);
     setPlayedEffects([]);
-    setSelectedEffectId(null);
-  };
+    setStrokesThisTurn(0);
+    setTurnNumber(n => n + 1);
+  }, [playedBabes, playedEffects]);
 
-  function computeSchedulesAtEnd() {
-    let addNext = 0, addTurn2 = 0, multNext = 0;
-    const onlyBabe = playedBabes.length === 1 ? playedBabes[0].name.toLowerCase() : null;
-
-    for (const e of playedEffects) {
-      const sch = e.schedule ?? {};
-      if (e.kind === "next-turn-modifier") {
-        let ok = true;
-        if (e.onlyBabePlayedName) ok = ok && !!onlyBabe && onlyBabe === e.onlyBabePlayedName.toLowerCase();
-        if (ok) {
-          if (sch.addNext) addNext += sch.addNext;
-          if (sch.multNext) multNext = (multNext || 1) * sch.multNext;
-        }
-      }
-      if (e.kind === "multi-turn-modifier") {
-        let ok = true;
-        if (e.onlyBabePlayedName) ok = ok && !!onlyBabe && onlyBabe === e.onlyBabePlayedName.toLowerCase();
-        if (ok) {
-          if (sch.addNext) addNext += sch.addNext;
-          if (sch.addTurn2) addTurn2 += sch.addTurn2;
-          if (sch.multNext) multNext = (multNext || 1) * sch.multNext;
-        }
-      }
-    }
-    return {
-      next: {
-        addNext: addNext || undefined,
-        multNext: multNext || undefined,
-      },
-      turn2: { addTurn2: addTurn2 || undefined },
-    };
-  }
-
-  const endTurn = () => {
-    const sched = computeSchedulesAtEnd();
-    const carryDown = pendingTurn2.addTurn2 ? { addNext: pendingTurn2.addTurn2 } : {};
-
-    setPendingNext((prev) => {
-      const combinedAdd = (carryDown.addNext ?? 0) + (sched.next.addNext ?? 0) + (prev.addNext ?? 0);
-      const combinedMult = (prev.multNext ? prev.multNext : 1) * (sched.next.multNext ?? 1);
-      return {
-        addNext: combinedAdd || undefined,
-        multNext: combinedMult !== 1 ? combinedMult : undefined,
-      };
+  const returnDiscardToDeck = useCallback(() => {
+    // Discard -> Deck
+    if (discard.babes.length === 0 && discard.effects.length === 0) return;
+    cfg?.setDeckBabes(prev => {
+      const ids = new Set(prev.map(b => b.id));
+      const add = discard.babes.filter(b => !ids.has(b.id));
+      return [...prev, ...add];
     });
-    setPendingTurn2(sched.turn2);
-
-    setDiscard((d) => ({
-      babes: [...d.babes, ...playedBabes.map(({ playId, ...rest }) => rest)],
-      effects: [...d.effects, ...playedEffects.map(({ playId, ...rest }) => rest)],
-    }));
-    resetTurn();
-    setTurnNumber((n) => n + 1);
-  };
-
-  const returnDiscardToDeck = () => {
-    const ret = { ...discard };
+    cfg?.setDeckEffects(prev => {
+      const ids = new Set(prev.map(e => e.id));
+      const add = discard.effects.filter(e => !ids.has(e.id));
+      return [...prev, ...add];
+    });
     setDiscard({ babes: [], effects: [] });
-    return ret;
-  };
+  }, [cfg, discard.babes, discard.effects]);
+
+  // Targeting placeholders (not used right now)
+  const bindEffect = useCallback((_babeId: string) => {}, []);
+  const confirmTargets = useCallback(() => {}, []);
+  const cancelTargets = useCallback(() => {}, []);
 
   return {
+    // state
     turnNumber,
-    pendingNext, pendingTurn2,
-    playedBabes, setPlayedBabes,
-    playedEffects, setPlayedEffects,
-    selectedEffectId, setSelectedEffectId,
-    computedLimits, canPlayBabe,
     strokesThisTurn,
-    playBabe, playEffect, bindEffect,
-    playBabeLimited, addPlayedBabeDirect,
-    reorderPlayedEffects,
-    resetTurn, endTurn,
-    discard, setDiscard, returnDiscardToDeck,
-    removePlayedBabe, removePlayedEffect,
+    pendingNext: undefined as { addNext?: number; multNext?: number } | undefined,
+    playedBabes,
+    playedEffects,
+    discard, // { babes: BabeCard[]; effects: EffectScript[] }
+    computedLimits,
+    finalScore,
+
+    // actions
+    playBabe,
+    playEffect,
+    removePlayedBabe,
+    removePlayedEffect,
+    bindEffect,
+    confirmTargets,
+    cancelTargets,
+    resetTurn,
+    endTurn,
+    returnDiscardToDeck,
   };
 }

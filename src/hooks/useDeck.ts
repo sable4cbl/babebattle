@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BabeCard, EffectCard } from "../types/cards";
-import { SAMPLE_BABES, SAMPLE_EFFECTS } from "../data/samples";
-import { loadDeck, saveDeck, type DeckState } from "../lib/storage";
+
+const STORAGE_KEY = "card-game-tool-deck-v3"; // bumped! starts empty for everyone
+
+type Deck = { babes: BabeCard[]; effects: EffectCard[] };
 
 export function useDeck(hiddenIds: Set<string>) {
-  const [deck, setDeck] = useState<DeckState>(() =>
-    loadDeck({ babes: SAMPLE_BABES, effects: SAMPLE_EFFECTS })
-  );
+  const [deck, setDeck] = useState<Deck>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw) as Deck;
+    } catch {}
+    return { babes: [], effects: [] };
+  });
 
-  useEffect(() => saveDeck(deck), [deck]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(deck));
+    } catch {}
+  }, [deck]);
 
   const visibleBabes = useMemo(
     () => deck.babes.filter((b) => !hiddenIds.has(b.id)),
@@ -19,40 +29,19 @@ export function useDeck(hiddenIds: Set<string>) {
     [deck.effects, hiddenIds]
   );
 
-  const addBabe = (b: Partial<BabeCard>) => {
-    const n: BabeCard = {
-      id: b.id || (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2),
-      name: b.name || "New Babe",
-      type: (b.type as any) || "Any",
-      baseScore: b.baseScore ?? 1,
-      img: b.img,
-    };
-    setDeck((d) => ({ ...d, babes: [...d.babes, n] }));
+  function removeBabe(id: string) {
+    setDeck((d) => ({ ...d, babes: d.babes.filter((b) => b.id !== id) }));
+  }
+
+  function removeEffect(id: string) {
+    setDeck((d) => ({ ...d, effects: d.effects.filter((e) => e.id !== id) }));
+  }
+
+  return {
+    visibleBabes,
+    visibleEffects,
+    setDeck,
+    removeBabe,
+    removeEffect,
   };
-
-  const addEffect = (e: Partial<EffectCard>) => {
-    const n: EffectCard = {
-      id: e.id || (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2),
-      name: e.name || "New Effect",
-      kind: (e.kind as any) || "add-final",
-      factor: e.factor,
-      add: e.add,
-      description: e.description,
-      targetBabeId: e.targetBabeId,
-      targetType: e.targetType,
-      extraBabes: e.extraBabes,
-      extraEffects: e.extraEffects,
-      // priority removed
-      discardCount: (e as any).discardCount, // optional for discard-babes-add-final
-      discardType: (e as any).discardType,
-    };
-    setDeck((d) => ({ ...d, effects: [...d.effects, n] }));
-  };
-
-  const removeBabe = (id: string) =>
-    setDeck((d) => ({ ...d, babes: d.babes.filter((x) => x.id !== id) }));
-  const removeEffect = (id: string) =>
-    setDeck((d) => ({ ...d, effects: d.effects.filter((x) => x.id !== id) }));
-
-  return { deck, visibleBabes, visibleEffects, addBabe, addEffect, removeBabe, removeEffect, setDeck };
 }

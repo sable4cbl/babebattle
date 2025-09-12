@@ -1,5 +1,5 @@
 import { BabeCard, EffectCard } from "../types/cards";
-import { uid } from "../lib/uid";
+import { uid } from "../utils/uid";
 
 export const SAMPLE_BABES: BabeCard[] = [
   { id: uid(), name: "Alice Delish GOLD", type: "BADDIE", baseScore: 9, gifName: "BADDIE Alice Delish GOLD.gif" },

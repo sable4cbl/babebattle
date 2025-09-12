@@ -1,151 +1,115 @@
 import React, { useMemo, useState } from "react";
-import { BabeCard, BabeType } from "../types/cards";
+import type { BabeCard } from "../types/cards";
+import { getTypeEmoji } from "../utils/typeEmoji";
 import BabeBadge from "./BabeBadge";
-import CardShell from "./ui/CardShell";
-import TypeCounters from "./TypeCounters";
 
-export type DeckTargetMode =
-  | {
-      active: true;
-      kind: "discard-babes-add-final";
-      need: number;
-      already: number;
-      type?: BabeType;
-      takenTypes?: Set<string>; // types already chosen (dim them)
-    }
-  | { active: false };
-
-export default function BabeDeck({
-  babes,
-  canPlayBabe,
-  playBabe,
-  title,
-  onOpenGifLibrary,
-  targetMode = { active: false },
-  onClickDeckBabe,
-}: {
+type Props = {
   babes: BabeCard[];
   canPlayBabe: boolean;
   playBabe: (b: BabeCard) => void;
-  title?: string;
-  onOpenGifLibrary?: () => void;
-  targetMode?: DeckTargetMode;
-  onClickDeckBabe?: (b: BabeCard) => void;
-}) {
-  const [sortBy, setSortBy] = useState<"name" | "base">("name");
+};
 
-  const groups = useMemo(() => {
-    const byType = new Map<BabeType, BabeCard[]>();
-    for (const b of babes) {
-      if (!byType.has(b.type)) byType.set(b.type, []);
-      byType.get(b.type)!.push(b);
+type SortKey = "name" | "score";
+type SortDir = "asc" | "desc";
+
+export default function BabeDeck({ babes, canPlayBabe, playBabe }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [activeType, setActiveType] = useState<string | null>(null);
+
+  const typeCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of babes) m.set(b.type, (m.get(b.type) || 0) + 1);
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [babes]);
+
+  const visible = useMemo(() => {
+    const arr = activeType ? babes.filter(b => b.type === activeType) : babes.slice();
+    arr.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+      else cmp = (a.baseScore ?? 0) - (b.baseScore ?? 0);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [babes, sortKey, sortDir, activeType]);
+
+  const grouped = useMemo(() => {
+    const g = new Map<string, BabeCard[]>();
+    for (const b of visible) {
+      if (!g.has(b.type)) g.set(b.type, []);
+      g.get(b.type)!.push(b);
     }
-    for (const [t, arr] of byType) {
-      arr.sort((a, b) =>
-        sortBy === "name"
-          ? a.name.localeCompare(b.name)
-          : b.baseScore - a.baseScore || a.name.localeCompare(b.name)
-      );
-      byType.set(t, arr);
-    }
-    return Array.from(byType.entries()).sort(([a], [b]) =>
-      String(a).localeCompare(String(b))
-    );
-  }, [babes, sortBy]);
-
-  const targeting = targetMode.active;
-  const taken = targetMode.active && targetMode.takenTypes ? targetMode.takenTypes : new Set<string>();
-  const picksRemaining =
-    targetMode.active && typeof targetMode.need === "number"
-      ? Math.max(0, targetMode.need - (targetMode.already ?? 0))
-      : 0;
-
-  /** For Trifecta we want: initially everything bright/clickable; after a pick, dim that type. */
-  const eligibleForTarget = (b: BabeCard) => {
-    if (!targeting) return false;
-    if (targetMode.kind !== "discard-babes-add-final") return false;
-    if (picksRemaining <= 0) return false;
-    // If a type is already taken, we must NOT allow more of that type
-    if (taken.has(b.type)) return false;
-    // If targetMode.type is specified (not for Trifecta), enforce it
-    if (targetMode.type && b.type !== targetMode.type) return false;
-    return true;
-  };
-
-  const onBabeCardClick = (b: BabeCard) => {
-    if (targeting && eligibleForTarget(b) && onClickDeckBabe) {
-      onClickDeckBabe(b);
-      return;
-    }
-    if (!targeting && canPlayBabe) playBabe(b);
-  };
+    return Array.from(g.entries());
+  }, [visible]);
 
   return (
-    // Raise the entire deck above the global overlay when targeting
-    <div className={`space-y-4 relative ${targeting ? "z-[60]" : ""}`}>
-      <div className="flex items-end justify-between">
-        <h2 className="text-xl font-semibold">{title ?? "Babes"}</h2>
+    <section>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-xl font-semibold">Babes</h2>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-600">Sort</label>
+          <label className="text-sm text-gray-600">Sort</label>
           <select
-            className="text-xs px-2 py-1 rounded-md border bg-white"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as "name" | "base")}
-            title="Sort Babes"
+            className="text-sm border rounded px-2 py-1"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
           >
             <option value="name">A → Z</option>
-            <option value="base">Base Score</option>
+            <option value="score">Score</option>
           </select>
-          {onOpenGifLibrary && (
-            <button
-              className="text-xs px-2 py-1 rounded-md border hover:bg-gray-100"
-              onClick={onOpenGifLibrary}
-              title="Open GIF Library"
-            >
-              GIF Library
-            </button>
-          )}
+          <button
+            className="text-sm border rounded px-2 py-1"
+            title={sortDir === "asc" ? "Ascending" : "Descending"}
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
         </div>
       </div>
 
-      <CardShell highlight={targeting}>
-        <div className="w-full">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">Available</div>
-            <TypeCounters babes={babes} />
-          </div>
-
-          {groups.length === 0 ? (
-            <div className="text-sm text-gray-500">No available Babe cards.</div>
-          ) : (
-            <div className="space-y-5">
-              {groups.map(([type, arr]) => (
-                <section key={String(type)}>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">{type}</h3>
-                  {/* Two columns per type section */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {arr.map((b) => {
-                      // Muting rule for Trifecta: dim only already-chosen types
-                      const selectable = eligibleForTarget(b);
-                      const muted = targeting && (taken.has(b.type) || !selectable ? true : false);
-
-                      return (
-                        <div key={b.id} className="flex justify-center">
-                          <BabeBadge
-                            b={b}
-                            muted={muted}
-                            onClick={() => onBabeCardClick(b)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
+      <div className="mb-2">
+        <div className="text-sm font-medium mb-1">Available</div>
+        <div className="flex flex-wrap gap-2">
+          {typeCounts.map(([t, n]) => {
+            const active = activeType === t;
+            return (
+              <button
+                key={t}
+                className={
+                  "text-xs px-2 py-1 rounded border " +
+                  (active ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50")
+                }
+                onClick={() => setActiveType((cur) => (cur === t ? null : t))}
+              >
+                <span className="mr-1">{getTypeEmoji(t)}</span>
+                {t}: {n}
+              </button>
+            );
+          })}
         </div>
-      </CardShell>
-    </div>
+      </div>
+
+      {grouped.map(([type, rows]) => (
+        <div key={type} className="mb-6">
+          {!activeType && (
+            <div className="text-2xl font-bold mb-2 mt-4">{type}</div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            {rows.map((b) => (
+              <div
+                key={b.id}
+                className={
+                  "cursor-pointer transition-transform active:scale-[0.98] " +
+                  (!canPlayBabe ? "opacity-50 pointer-events-none" : "")
+                }
+                onClick={() => canPlayBabe && playBabe(b)}
+              >
+                <BabeBadge b={b} size={{ w: 200, h: 280 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }

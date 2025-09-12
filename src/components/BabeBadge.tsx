@@ -1,73 +1,39 @@
-import React, { useEffect, useState } from "react";
-import { BabeCard } from "../types/cards";
+import React from "react";
+import type { BabeCard } from "../types/cards";
 import { useGifLibrary } from "../media/GifLibrary";
 
-export default function BabeBadge({
-  b,
-  score,
-  muted,
-  selected,
-  onClick,
-  small = false,
-}: {
+type Props = {
   b: BabeCard;
-  score?: number;
-  muted?: boolean;
-  selected?: boolean;
+  size?: { w: number; h: number }; // default 200x280
   onClick?: () => void;
-  small?: boolean;
-}) {
-  const { getGifURLByName, makeBabeGifName, version } = useGifLibrary();
-  const [gifUrl, setGifUrl] = useState<string | null>(null);
-  const expectedFilename = makeBabeGifName(b.type, b.name, b.gifName);
+  muted?: boolean;
+};
 
-  useEffect(() => {
-    let alive = true;
-    let prev: string | null = null;
-    (async () => {
-      const url = await getGifURLByName(expectedFilename);
-      if (!alive) return;
-      if (prev && prev !== url) {
-        try { URL.revokeObjectURL(prev); } catch {}
-      }
-      prev = url;
-      setGifUrl(url);
-    })();
-    return () => {
-      alive = false;
-      if (prev) {
-        try { URL.revokeObjectURL(prev); } catch {}
-      }
-    };
-  }, [expectedFilename, getGifURLByName, version]);
+export default function BabeBadge({ b, size, onClick, muted }: Props) {
+  const lib = useGifLibrary();
+  const url = lib.getBabeURL({
+    type: (b as any).type,
+    name: b.name,
+    gifName: (b as any).gifName,
+  });
 
-  const tileClass = small ? "w-[100px] h-[140px]" : "w-[175px] h-[245px]";
+  const W = size?.w ?? 200;
+  const H = size?.h ?? 280;
 
   return (
     <div
-      className={[
-        "relative rounded-xl overflow-hidden border bg-white",
-        tileClass,
-        "flex-none",
-        "transition-shadow hover:shadow-md cursor-pointer",
-        muted ? "opacity-40" : "",
-        selected ? "ring-2 ring-blue-400" : "",
-      ].join(" ")}
+      className={
+        "relative rounded overflow-hidden shadow " +
+        (muted ? "opacity-50" : "bg-white")
+      }
+      style={{ width: W, height: H, cursor: onClick ? "pointer" : "default" }}
       onClick={onClick}
-      role="button"
-      title={`${b.name} • ${b.type} • Base ${b.baseScore}`}
     >
-      {gifUrl ? (
-        <img src={gifUrl} alt={b.name} className="w-full h-full object-cover" loading="lazy" />
+      {url ? (
+        <img src={url} alt={b.name} className="object-cover w-full h-full" />
       ) : (
-        <div className="w-full h-full bg-gray-200 flex items-end justify-stretch">
-          <div className="w-full bg-gray-900/80 text-white p-2">
-            <div className="text-xs font-semibold truncate">{b.name}</div>
-            <div className="text-white/80 text-[11px]">
-              {b.type} • Base {b.baseScore}
-              {typeof score === "number" && score !== b.baseScore ? ` → ${score}` : ""}
-            </div>
-          </div>
+        <div className="flex items-center justify-center w-full h-full bg-gray-200 text-sm text-gray-700 px-2 text-center">
+          {b.name}
         </div>
       )}
     </div>

@@ -1,65 +1,35 @@
-import React, { useEffect, useState } from "react";
-import { EffectCard } from "../types/cards";
+import React from "react";
+import type { EffectScript } from "../types/effects";
 import { useGifLibrary } from "../media/GifLibrary";
 
-export default function EffectBadge({
-  e,
-  disabled,
-  onClick,
-}: {
-  e: EffectCard;
-  disabled?: boolean;
-  onClick?: () => void;
-}) {
-  const { getEffectGifURL, version } = useGifLibrary();
-  const [gifUrl, setGifUrl] = useState<string | null>(null);
+type Props = {
+  e: EffectScript;
+  size?: { w: number; h: number }; // default 200x280
+};
 
-  useEffect(() => {
-    let alive = true;
-    let prev: string | null = null;
-    (async () => {
-      const url = await getEffectGifURL(e.name, {
-        override: e.gifName,
-        performerUpper: e.gifPerformerTagUpper,
-        typeUpper:
-          e.gifTypeTagUpper ||
-          (typeof e.targetType === "string" ? e.targetType.toUpperCase() : undefined),
-      });
-      if (!alive) return;
-      if (prev && prev !== url) {
-        try { URL.revokeObjectURL(prev); } catch {}
-      }
-      prev = url;
-      setGifUrl(url);
-    })();
-    return () => {
-      alive = false;
-      if (prev) {
-        try { URL.revokeObjectURL(prev); } catch {}
-      }
-    };
-  }, [e.name, e.gifName, e.gifPerformerTagUpper, e.gifTypeTagUpper, e.targetType, getEffectGifURL, version]);
+export default function EffectBadge({ e, size }: Props) {
+  const lib = useGifLibrary();
+  // If your EffectScript has signatureOf (for SIGNATURE), lib will use it.
+  const url = lib.getEffectURL({
+    group: e.group as any,
+    name: e.name,
+    gifName: (e as any).gifName,
+    signatureOf: (e as any).signatureOf,
+  });
+
+  const W = size?.w ?? 200;
+  const H = size?.h ?? 280;
 
   return (
     <div
-      className={[
-        "relative rounded-xl overflow-hidden border bg-white",
-        "w-[100px] h-[140px]",
-        "flex-none",
-        "transition-shadow hover:shadow-md cursor-pointer",
-        disabled ? "opacity-50 pointer-events-none" : "",
-      ].join(" ")}
-      onClick={disabled ? undefined : onClick}
-      role="button"
-      title={e.description || e.name}
+      className="relative rounded overflow-hidden shadow bg-white"
+      style={{ width: W, height: H }}
     >
-      {gifUrl ? (
-        <img src={gifUrl} alt={e.name} className="w-full h-full object-cover" loading="lazy" />
+      {url ? (
+        <img src={url} alt={e.name} className="object-cover w-full h-full" />
       ) : (
-        <div className="w-full h-full bg-gray-200 flex items-end justify-stretch">
-          <div className="w-full bg-gray-900/80 text-white p-1.5">
-            <div className="text-[11px] font-semibold truncate">{e.name}</div>
-          </div>
+        <div className="flex items-center justify-center w-full h-full bg-gray-200 text-sm text-gray-700 px-2 text-center">
+          {e.name}
         </div>
       )}
     </div>

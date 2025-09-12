@@ -1,194 +1,178 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-
-const DB_NAME = "cardtool-gifs";
-const STORE = "gifs";
+import React, { createContext, useContext, useMemo, useRef, useState } from "react";
 
 /**
- * Robust normalization:
- * - Unicode NFKC (compatibility normalization)
- * - Replace any whitespace (Unicode), dashes (ASCII/en/em), underscores with a single space
- * - Collapse spaces
- * - Trim
- * - Uppercase
- * - Keep extension, but normalize it to ".GIF"
+ * GIF Library
+ * - Stores selected files as object URLs.
+ * - Provides tolerant lookups by exact filename and a normalized key.
+ * - Exposes both the new API (getBabeURL / getEffectURL) and
+ *   compatibility shims used by older components (clearAll, knownCount, getUrl).
  */
-function normalizeFilenameV2(name: string): string {
-  const trimmed = name.normalize("NFKC").trim();
 
-  // split extension once (last dot). if none, treat as ".GIF"
-  const lastDot = trimmed.lastIndexOf(".");
-  const base = (lastDot > 0 ? trimmed.slice(0, lastDot) : trimmed)
-    // replace Unicode spaces, dash punctuation, and underscores with spaces
-    // \p{Z} = any separator, \p{Pd} = dash punctuation (en dash, em dash, etc.)
-    .replace(/[\p{Z}\p{Pd}_]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
+type Url = string;
 
-  const ext = ".GIF";
-  return base ? `${base}${ext}` : `UNKNOWN${ext}`;
-}
+type ExactMap = Map<string, Url>;
+type NormMap = Map<string, Url>;
 
-/** Legacy normalization we used earlier (kept for backward-compat lookups). */
-function normalizeFilenameLegacy(name: string): string {
-  return name
-    .normalize("NFKC")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
-}
+export type GifLibraryValue = {
+  // Core API
+  addFiles: (files: FileList | File[]) => Promise<void>;
+  getGifURLByName: (name: string) => string | null;
 
-type GifEntry = { key: string; originalKey: string; name: string; blob: Blob };
+  makeBabeGifName: (type: string, name: string) => string;
+  makeEffectGifName: (group: string, name: string, signatureOf?: string) => string;
 
-type GifLibraryValue = {
-  ready: boolean;
-  version: number;
-  putManyGifs: (files: File[]) => Promise<void>;
-  clearAll: () => Promise<void>;
-  getGifURLByName: (filename: string) => Promise<string | null>;
-  // helpers for badges
-  makeBabeGifName: (type: string, name: string, override?: string) => string;
-  getEffectGifURL: (
-    title: string,
-    opts?: { performerUpper?: string; typeUpper?: string; override?: string }
-  ) => Promise<string | null>;
+  getBabeURL: (b: { type: string; name: string; gifName?: string }) => string | null;
+  getEffectURL: (e: { group: string; name: string; gifName?: string; signatureOf?: string }) => string | null;
+
+  // State
+  count: number;
+
+  // --- Compatibility shims (so existing components keep working) ---
+  clearAll: () => void;               // old: reset the library when a new selection is made
+  knownCount: number;                 // old alias for 'count'
+  getUrl: (name: string) => string | null; // old alias for getGifURLByName
 };
 
-const Ctx = createContext<GifLibraryValue | null>(null);
-
-export function GifLibraryProvider({ children }: { children: React.ReactNode }) {
-  const [db, setDb] = useState<IDBDatabase | null>(null);
-  const [version, setVersion] = useState(0);
-
-  useEffect(() => {
-    // bump version to 3 for schema evolution (still same store, we just change normalization)
-    const req = indexedDB.open(DB_NAME, 3);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE);
-      }
-    };
-    req.onsuccess = () => setDb(req.result);
-    req.onerror = () => console.error("IDB open error", req.error);
-  }, []);
-
-  const txPutMany = (entries: GifEntry[]) =>
-    new Promise<void>((resolve, reject) => {
-      if (!db) return reject(new Error("DB not ready"));
-      const tx = db.transaction(STORE, "readwrite");
-      const store = tx.objectStore(STORE);
-      for (const e of entries) store.put(e, e.key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-
-  const txGet = (key: string) =>
-    new Promise<GifEntry | undefined>((resolve, reject) => {
-      if (!db) return resolve(undefined);
-      const tx = db.transaction(STORE, "readonly");
-      const store = tx.objectStore(STORE);
-      const req = store.get(key);
-      req.onsuccess = () => resolve(req.result as GifEntry | undefined);
-      req.onerror = () => reject(req.error);
-    });
-
-  const value = useMemo<GifLibraryValue>(
-    () => ({
-      ready: !!db,
-      version,
-
-      async putManyGifs(files: File[]) {
-        if (!db || files.length === 0) return;
-        const gifs = files.filter((f) => /\.gif$/i.test(f.name));
-        if (gifs.length === 0) return;
-
-        const entries: GifEntry[] = gifs.map((f) => {
-          const original = f.name.trim();
-          const keyV2 = normalizeFilenameV2(original);
-          return {
-            key: keyV2,
-            originalKey: original,
-            name: original,
-            blob: f.slice(0, f.size, "image/gif"),
-          };
-        });
-
-        await txPutMany(entries);
-        setVersion((v) => v + 1);
-      },
-
-      async clearAll() {
-        if (!db) return;
-        await new Promise<void>((resolve, reject) => {
-          const tx = db.transaction(STORE, "readwrite");
-          const store = tx.objectStore(STORE);
-          const req = store.clear();
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        });
-        setVersion((v) => v + 1);
-      },
-
-      async getGifURLByName(filename: string) {
-        if (!filename) return null;
-
-        // try V2 normalization first
-        const v2 = normalizeFilenameV2(filename);
-        let entry = await txGet(v2);
-
-        // fallback to legacy normalization if not found (so old imports still work)
-        if (!entry) {
-          const legacy = normalizeFilenameLegacy(filename);
-          entry = await txGet(legacy);
-        }
-
-        if (!entry) return null;
-        return URL.createObjectURL(entry.blob);
-      },
-
-      makeBabeGifName(type: string, name: string, override?: string) {
-        return override || `${type} ${name}.gif`;
-      },
-
-      async getEffectGifURL(
-        title: string,
-        opts?: { performerUpper?: string; typeUpper?: string; override?: string }
-      ) {
-        // 1) exact override
-        if (opts?.override) {
-          const hit =
-            (await txGet(normalizeFilenameV2(opts.override))) ||
-            (await txGet(normalizeFilenameLegacy(opts.override)));
-          if (hit) return URL.createObjectURL(hit.blob);
-        }
-
-        // Build candidates (we'll normalize each with V2 and legacy when looking up)
-        const titleClean = title.trim();
-        const candidates: string[] = [];
-        if (opts?.performerUpper)
-          candidates.push(`EFFECT ${opts.performerUpper.trim()} ${titleClean}.gif`);
-        if (opts?.typeUpper) candidates.push(`EFFECT ${opts.typeUpper.trim()} ${titleClean}.gif`);
-        candidates.push(`EFFECT ${titleClean}.gif`);
-
-        for (const name of candidates) {
-          const hit =
-            (await txGet(normalizeFilenameV2(name))) ||
-            (await txGet(normalizeFilenameLegacy(name)));
-          if (hit) return URL.createObjectURL(hit.blob);
-        }
-        return null;
-      },
-    }),
-    [db, version]
-  );
-
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
-}
+const GifLibraryCtx = createContext<GifLibraryValue | null>(null);
 
 export function useGifLibrary() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useGifLibrary must be used within GifLibraryProvider");
+  const ctx = useContext(GifLibraryCtx);
+  if (!ctx) throw new Error("GifLibraryProvider missing in tree");
   return ctx;
+}
+
+// ---------------- helpers ----------------
+
+function normKey(s: string): string {
+  // drop common extensions, lowercase, collapse spaces, strip some punctuation
+  const noExt = s.replace(/\.(gif|webp|png|jpg|jpeg)$/i, "");
+  return noExt
+    .toLowerCase()
+    .replace(/[._-]+/g, " ")
+    .replace(/[:]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ---------------- provider ----------------
+
+export function GifLibraryProvider({ children }: { children: React.ReactNode }) {
+  const [count, setCount] = useState(0);
+
+  const exactMapRef = useRef<ExactMap>(new Map());
+  const normMapRef = useRef<NormMap>(new Map());
+  const urlsRef = useRef<string[]>([]); // keep to revoke on clear
+
+  const clearAll = () => {
+    // Revoke previous object URLs to avoid leaks
+    for (const u of urlsRef.current) {
+      try {
+        URL.revokeObjectURL(u);
+      } catch {}
+    }
+    urlsRef.current = [];
+    exactMapRef.current.clear();
+    normMapRef.current.clear();
+    setCount(0);
+  };
+
+  const addFiles = async (filesLike: FileList | File[]) => {
+    const files: File[] = Array.from(filesLike as any);
+    for (const f of files) {
+      const url = URL.createObjectURL(f);
+      urlsRef.current.push(url);
+
+      const exactKey = f.name;
+      const nkey = normKey(f.name);
+
+      exactMapRef.current.set(exactKey, url);
+      if (!normMapRef.current.has(nkey)) normMapRef.current.set(nkey, url);
+    }
+    setCount(exactMapRef.current.size);
+  };
+
+  const getGifURLByName = (name: string): string | null => {
+    if (!name) return null;
+    const ex = exactMapRef.current.get(name);
+    if (ex) return ex;
+    const n = normMapRef.current.get(normKey(name));
+    return n ?? null;
+  };
+
+  const makeBabeGifName = (type: string, name: string) => `${type} ${name}.gif`;
+
+  const makeEffectGifName = (group: string, name: string, signatureOf?: string) => {
+    if (group?.toUpperCase() === "SIGNATURE" && signatureOf) {
+      return `EFFECT ${signatureOf} ${name}.gif`;
+    }
+    return group ? `EFFECT ${group} ${name}.gif` : `EFFECT ${name}.gif`;
+  };
+
+  const getBabeURL = (b: { type: string; name: string; gifName?: string }) => {
+    const candidates: string[] = [];
+    if (b.gifName) candidates.push(b.gifName);
+    candidates.push(makeBabeGifName(b.type, b.name));
+
+    const clean = b.name.replace(/[:]/g, "").replace(/\s+/g, " ").trim();
+    candidates.push(`${b.type} ${clean}.gif`);
+
+    for (const c of candidates) {
+      const url = getGifURLByName(c);
+      if (url) return url;
+    }
+    return null;
+  };
+
+  const getEffectURL = (e: { group: string; name: string; gifName?: string; signatureOf?: string }) => {
+    const candidates: string[] = [];
+    if (e.gifName) candidates.push(e.gifName);
+
+    candidates.push(makeEffectGifName(e.group, e.name, e.signatureOf));
+
+    const clean = e.name.replace(/[:]/g, "").replace(/\s+/g, " ").trim();
+
+    if (e.group?.toUpperCase() === "SIGNATURE" && e.signatureOf) {
+      candidates.push(`EFFECT ${e.signatureOf} ${clean}.gif`);
+      candidates.push(`EFFECT ${e.signatureOf.toUpperCase()} ${clean}.gif`);
+    }
+
+    if (e.group) {
+      candidates.push(`EFFECT ${e.group} ${e.name}.gif`);
+      candidates.push(`EFFECT ${e.group} ${clean}.gif`);
+      candidates.push(`EFFECT ${e.group.toUpperCase()} ${clean}.gif`);
+    }
+
+    candidates.push(`EFFECT ${e.name}.gif`);
+    candidates.push(`EFFECT ${clean}.gif`);
+
+    const tried = new Set<string>();
+    for (const c of candidates) {
+      if (tried.has(c)) continue;
+      tried.add(c);
+      const url = getGifURLByName(c);
+      if (url) return url;
+    }
+    return null;
+  };
+
+  const value: GifLibraryValue = useMemo(
+    () => ({
+      // core
+      addFiles,
+      getGifURLByName,
+      makeBabeGifName,
+      makeEffectGifName,
+      getBabeURL,
+      getEffectURL,
+      count,
+
+      // shims
+      clearAll,
+      knownCount: count,
+      getUrl: getGifURLByName,
+    }),
+    [count]
+  );
+
+  return <GifLibraryCtx.Provider value={value}>{children}</GifLibraryCtx.Provider>;
 }
