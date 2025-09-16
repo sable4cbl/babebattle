@@ -1,20 +1,27 @@
 import React from "react";
-import type { EffectScript } from "../types/effects";
+import type { EffectScript, BoundEffect } from "../types/effects";
 import { useGifLibrary } from "../media/GifLibrary";
 
 type Props = {
-  e: EffectScript;
+  // Accept both authored scripts and played/bound instances
+  e: EffectScript | BoundEffect;
   size?: { w: number; h: number }; // default 200x280
 };
 
 export default function EffectBadge({ e, size }: Props) {
   const lib = useGifLibrary();
-  // If your EffectScript has signatureOf (for SIGNATURE), lib will use it.
+
+  // Defensive normalization — NEVER pass undefined to the gif helper
+  const group = (e as any)?.group ?? "";
+  const name = typeof (e as any)?.name === "string" ? (e as any).name : "";
+  const gifName = (e as any)?.gifName ?? "";
+  const signatureOf = (e as any)?.signatureOf ?? "";
+
   const url = lib.getEffectURL({
-    group: e.group as any,
-    name: e.name,
-    gifName: (e as any).gifName,
-    signatureOf: (e as any).signatureOf,
+    group: group as any,
+    name,          // always a string (maybe empty)
+    gifName,       // always a string (maybe empty)
+    signatureOf,   // always a string (maybe empty)
   });
 
   const W = size?.w ?? 200;
@@ -24,12 +31,13 @@ export default function EffectBadge({ e, size }: Props) {
     <div
       className="relative rounded overflow-hidden shadow bg-white"
       style={{ width: W, height: H }}
+      title={name || "Effect"}
     >
       {url ? (
-        <img src={url} alt={e.name} className="object-cover w-full h-full" />
+        <img src={url} alt={name || "Effect"} className="object-cover w-full h-full" />
       ) : (
         <div className="flex items-center justify-center w-full h-full bg-gray-200 text-sm text-gray-700 px-2 text-center">
-          {e.name}
+          {name || "Unknown Effect"}
         </div>
       )}
     </div>

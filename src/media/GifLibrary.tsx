@@ -1,178 +1,199 @@
 import React, { createContext, useContext, useMemo, useRef, useState } from "react";
 
 /**
- * GIF Library
- * - Stores selected files as object URLs.
- * - Provides tolerant lookups by exact filename and a normalized key.
- * - Exposes both the new API (getBabeURL / getEffectURL) and
- *   compatibility shims used by older components (clearAll, knownCount, getUrl).
+ * Very lightweight in-memory GIF library:
+ * - Stores File -> objectURL map
+ * - Provides babe/effect URL resolvers with robust normalization
+ * - Exposes debug utilities so you can see what was attempted
  */
 
-type Url = string;
+type FileMap = Map<string, string>; // filename -> objectURL
 
-type ExactMap = Map<string, Url>;
-type NormMap = Map<string, Url>;
+type GetBabeURLParams = {
+  type?: string;
+  name?: string;
+  gifName?: string; // explicit override
+};
+
+type GetEffectURLParams = {
+  group?: string;       // e.g. "BADDIE", "GENERIC", "SIGNATURE"
+  name?: string;        // e.g. "Collab"
+  gifName?: string;     // explicit override
+  signatureOf?: string; // e.g. "ALICE DELISH" (for SIGNATURE)
+};
+
+type DebugReport = {
+  availableKeys: string[];
+  triedKeys: string[];
+  matchedKey?: string;
+};
 
 export type GifLibraryValue = {
-  // Core API
-  addFiles: (files: FileList | File[]) => Promise<void>;
-  getGifURLByName: (name: string) => string | null;
+  addFiles: (files: File[]) => void;
+  clearAll: () => void;
+  knownCount: number;
 
-  makeBabeGifName: (type: string, name: string) => string;
-  makeEffectGifName: (group: string, name: string, signatureOf?: string) => string;
+  // raw access
+  getUrl: (filename: string) => string | undefined;
 
-  getBabeURL: (b: { type: string; name: string; gifName?: string }) => string | null;
-  getEffectURL: (e: { group: string; name: string; gifName?: string; signatureOf?: string }) => string | null;
+  // domain-aware access
+  getBabeURL: (p: GetBabeURLParams) => string | undefined;
+  getEffectURL: (p: GetEffectURLParams) => string | undefined;
 
-  // State
-  count: number;
-
-  // --- Compatibility shims (so existing components keep working) ---
-  clearAll: () => void;               // old: reset the library when a new selection is made
-  knownCount: number;                 // old alias for 'count'
-  getUrl: (name: string) => string | null; // old alias for getGifURLByName
+  // debug helpers
+  debugEffectLookup: (p: GetEffectURLParams) => DebugReport;
+  debugBabeLookup: (p: GetBabeURLParams) => DebugReport;
 };
 
 const GifLibraryCtx = createContext<GifLibraryValue | null>(null);
 
-export function useGifLibrary() {
-  const ctx = useContext(GifLibraryCtx);
-  if (!ctx) throw new Error("GifLibraryProvider missing in tree");
-  return ctx;
-}
-
-// ---------------- helpers ----------------
-
-function normKey(s: string): string {
-  // drop common extensions, lowercase, collapse spaces, strip some punctuation
-  const noExt = s.replace(/\.(gif|webp|png|jpg|jpeg)$/i, "");
-  return noExt
+function normalizeFilename(s: string): string {
+  // Lowercase, collapse spaces/underscores, remove duplicate dashes,
+  // unify "gold" vs "GOLD", strip exotic punctuation
+  return s
     .toLowerCase()
-    .replace(/[._-]+/g, " ")
-    .replace(/[:]/g, "")
+    .replace(/\.(gif|webp|png|jpg|jpeg)$/i, ".gif")
+    .replace(/[_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[’'`"]/g, "")         // quotes
+    .replace(/[:;,!?()]/g, "")      // punctuation
+    .replace(/\s*-\s*/g, " ")       // hyphen spacing
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// ---------------- provider ----------------
+function allVariants(base: string): string[] {
+  // produce simple permutations: collapse consecutive spaces, with/without "gold"
+  const b = normalizeFilename(base);
+  const variants = new Set<string>();
+  variants.add(b);
+  variants.add(b.replace(/\bgold\b/g, "gold"));
+  variants.add(b.replace(/\bgold\b/g, " gold"));
+  variants.add(b.replace(/\s+/g, " "));
+  return Array.from(variants);
+}
+
+function effectCandidateNames(p: GetEffectURLParams): string[] {
+  const group = (p.group ?? "").trim();
+  const name = (p.name ?? "").trim();
+  const sig  = (p.signatureOf ?? "").trim();
+
+  const raw: string[] = [];
+
+  // 1) Explicit gifName has priority
+  if (p.gifName && p.gifName.trim()) raw.push(p.gifName.trim());
+
+  // 2) Canonical patterns
+  if (group && name)      raw.push(`EFFECT ${group} ${name}.gif`);
+  if (sig && name)        raw.push(`EFFECT ${sig} ${name}.gif`);
+  if (name && !group && !sig) raw.push(`EFFECT ${name}.gif`);
+
+  // 3) Looser variants (remove extra punctuation already done in normalize)
+  return raw.flatMap(allVariants);
+}
+
+function babeCandidateNames(p: GetBabeURLParams): string[] {
+  const type = (p.type ?? "").trim();
+  const name = (p.name ?? "").trim();
+
+  const raw: string[] = [];
+
+  if (p.gifName && p.gifName.trim()) raw.push(p.gifName.trim());
+  if (type && name) raw.push(`${type} ${name}.gif`);
+  if (name && !type) raw.push(`${name}.gif`);
+
+  return raw.flatMap(allVariants);
+}
 
 export function GifLibraryProvider({ children }: { children: React.ReactNode }) {
-  const [count, setCount] = useState(0);
+  const filesRef = useRef<FileMap>(new Map());
+  const [version, setVersion] = useState(0); // bump to trigger renders
 
-  const exactMapRef = useRef<ExactMap>(new Map());
-  const normMapRef = useRef<NormMap>(new Map());
-  const urlsRef = useRef<string[]>([]); // keep to revoke on clear
-
-  const clearAll = () => {
-    // Revoke previous object URLs to avoid leaks
-    for (const u of urlsRef.current) {
-      try {
-        URL.revokeObjectURL(u);
-      } catch {}
-    }
-    urlsRef.current = [];
-    exactMapRef.current.clear();
-    normMapRef.current.clear();
-    setCount(0);
-  };
-
-  const addFiles = async (filesLike: FileList | File[]) => {
-    const files: File[] = Array.from(filesLike as any);
+  function addFiles(files: File[]) {
     for (const f of files) {
+      const key = normalizeFilename(f.name);
+      const prev = filesRef.current.get(key);
+      if (prev) URL.revokeObjectURL(prev);
       const url = URL.createObjectURL(f);
-      urlsRef.current.push(url);
-
-      const exactKey = f.name;
-      const nkey = normKey(f.name);
-
-      exactMapRef.current.set(exactKey, url);
-      if (!normMapRef.current.has(nkey)) normMapRef.current.set(nkey, url);
+      filesRef.current.set(key, url);
     }
-    setCount(exactMapRef.current.size);
-  };
+    setVersion((v) => v + 1);
+  }
 
-  const getGifURLByName = (name: string): string | null => {
-    if (!name) return null;
-    const ex = exactMapRef.current.get(name);
-    if (ex) return ex;
-    const n = normMapRef.current.get(normKey(name));
-    return n ?? null;
-  };
+  function clearAll() {
+    for (const [, url] of filesRef.current) URL.revokeObjectURL(url);
+    filesRef.current.clear();
+    setVersion((v) => v + 1);
+  }
 
-  const makeBabeGifName = (type: string, name: string) => `${type} ${name}.gif`;
+  function getUrl(filename: string): string | undefined {
+    if (!filename) return undefined;
+    const key = normalizeFilename(filename);
+    return filesRef.current.get(key);
+  }
 
-  const makeEffectGifName = (group: string, name: string, signatureOf?: string) => {
-    if (group?.toUpperCase() === "SIGNATURE" && signatureOf) {
-      return `EFFECT ${signatureOf} ${name}.gif`;
-    }
-    return group ? `EFFECT ${group} ${name}.gif` : `EFFECT ${name}.gif`;
-  };
-
-  const getBabeURL = (b: { type: string; name: string; gifName?: string }) => {
-    const candidates: string[] = [];
-    if (b.gifName) candidates.push(b.gifName);
-    candidates.push(makeBabeGifName(b.type, b.name));
-
-    const clean = b.name.replace(/[:]/g, "").replace(/\s+/g, " ").trim();
-    candidates.push(`${b.type} ${clean}.gif`);
-
+  function tryKeys(candidates: string[]): { url?: string; matchedKey?: string; tried: string[] } {
+    const tried: string[] = [];
     for (const c of candidates) {
-      const url = getGifURLByName(c);
-      if (url) return url;
+      const k = normalizeFilename(c);
+      tried.push(k);
+      const url = filesRef.current.get(k);
+      if (url) return { url, matchedKey: k, tried };
     }
-    return null;
-  };
+    return { tried };
+  }
 
-  const getEffectURL = (e: { group: string; name: string; gifName?: string; signatureOf?: string }) => {
-    const candidates: string[] = [];
-    if (e.gifName) candidates.push(e.gifName);
+  function getEffectURL(p: GetEffectURLParams): string | undefined {
+    const candidates = effectCandidateNames(p);
+    const { url } = tryKeys(candidates);
+    return url;
+  }
 
-    candidates.push(makeEffectGifName(e.group, e.name, e.signatureOf));
+  function getBabeURL(p: GetBabeURLParams): string | undefined {
+    const candidates = babeCandidateNames(p);
+    const { url } = tryKeys(candidates);
+    return url;
+  }
 
-    const clean = e.name.replace(/[:]/g, "").replace(/\s+/g, " ").trim();
+  function debugEffectLookup(p: GetEffectURLParams): DebugReport {
+    const candidates = effectCandidateNames(p);
+    const { url, matchedKey, tried } = tryKeys(candidates);
+    return {
+      availableKeys: Array.from(filesRef.current.keys()).sort(),
+      triedKeys: tried,
+      matchedKey: url ? matchedKey : undefined,
+    };
+  }
 
-    if (e.group?.toUpperCase() === "SIGNATURE" && e.signatureOf) {
-      candidates.push(`EFFECT ${e.signatureOf} ${clean}.gif`);
-      candidates.push(`EFFECT ${e.signatureOf.toUpperCase()} ${clean}.gif`);
-    }
-
-    if (e.group) {
-      candidates.push(`EFFECT ${e.group} ${e.name}.gif`);
-      candidates.push(`EFFECT ${e.group} ${clean}.gif`);
-      candidates.push(`EFFECT ${e.group.toUpperCase()} ${clean}.gif`);
-    }
-
-    candidates.push(`EFFECT ${e.name}.gif`);
-    candidates.push(`EFFECT ${clean}.gif`);
-
-    const tried = new Set<string>();
-    for (const c of candidates) {
-      if (tried.has(c)) continue;
-      tried.add(c);
-      const url = getGifURLByName(c);
-      if (url) return url;
-    }
-    return null;
-  };
+  function debugBabeLookup(p: GetBabeURLParams): DebugReport {
+    const candidates = babeCandidateNames(p);
+    const { url, matchedKey, tried } = tryKeys(candidates);
+    return {
+      availableKeys: Array.from(filesRef.current.keys()).sort(),
+      triedKeys: tried,
+      matchedKey: url ? matchedKey : undefined,
+    };
+  }
 
   const value: GifLibraryValue = useMemo(
     () => ({
-      // core
       addFiles,
-      getGifURLByName,
-      makeBabeGifName,
-      makeEffectGifName,
+      clearAll,
+      knownCount: filesRef.current.size,
+      getUrl,
       getBabeURL,
       getEffectURL,
-      count,
-
-      // shims
-      clearAll,
-      knownCount: count,
-      getUrl: getGifURLByName,
+      debugEffectLookup,
+      debugBabeLookup,
     }),
-    [count]
+    [version]
   );
 
   return <GifLibraryCtx.Provider value={value}>{children}</GifLibraryCtx.Provider>;
+}
+
+export function useGifLibrary(): GifLibraryValue {
+  const ctx = useContext(GifLibraryCtx);
+  if (!ctx) throw new Error("GifLibraryProvider missing in tree");
+  return ctx;
 }

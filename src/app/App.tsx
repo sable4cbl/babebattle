@@ -5,13 +5,11 @@ import type { BabeCard } from "../types/cards";
 import type { EffectScript } from "../types/effects";
 import MainBoard from "./MainBoard";
 
-type DeckState = { babes: BabeCard[]; effects: EffectScript[] };
+export type DeckState = { babes: BabeCard[]; effects: EffectScript[] };
 
 export default function App() {
-  // App has exactly one hook; order never changes.
   const [deck, setDeck] = useState<DeckState | null>(null);
 
-  // Simple console guards (not hooks)
   if (typeof window !== "undefined" && !(window as any).__appSafeLogger) {
     (window as any).__appSafeLogger = true;
     window.addEventListener("error", (e) =>
@@ -38,6 +36,7 @@ export default function App() {
           <ImportDeckPanel onImported={setDeckSafe} />
         </div>
       ) : (
+        // ✅ MainBoard is where engine logic is hooked in
         <MainBoard deck={deck} setDeck={setDeck} />
       )}
     </ErrorBoundary>
