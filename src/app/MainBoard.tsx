@@ -3,7 +3,7 @@ import DeckPool from "../features/deckbuilder/DeckPool";
 import PlayArea from "../components/PlayArea";
 import { useTurn } from "../hooks/useTurn";
 import type { BabeCard } from "../types/cards";
-import type { EffectScript, TargetDecl, BoundEffect } from "../types/effects";
+import type { EffectScript, TargetDeck, BoundEffect } from "../types/effects";
 
 // ⬇️ Engine hook (no auto-targeting)
 import { useComputedScore } from "../engine/useComputedScore";
@@ -315,7 +315,7 @@ export default function MainBoard({ deck, setDeck }: Props) {
               scoreBreakdown={score}
               overallOps={overallOps}
               onReplayBabeFromDiscard={(id: string) => (turn as any).replayBabeFromDiscard?.(id)}
-              targeting={targetingEffect?.target as TargetDecl | undefined}
+              targeting={targetingEffect?.target as TargetDeck | undefined}
               selectedTargetIds={selectedTargets}
             />
           </div>
@@ -380,7 +380,7 @@ export default function MainBoard({ deck, setDeck }: Props) {
       {/* Targeting instruction toast + progress */}
       {targetingEffect && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white text-sm px-3 py-1.5 rounded shadow flex items-center gap-2">
-          <span>{targetingEffect.name === 'Babe Swap' ? 'Select 1 Babe from the Babe List, then 1 Babe from the Discard Pile.' : buildTargetInstruction(targetingEffect.target as TargetDecl)}</span>
+          <span>{targetingEffect.name === 'Babe Swap' ? 'Select 1 Babe from the Babe List, then 1 Babe from the Discard Pile.' : buildTargetInstruction(targetingEffect.target as TargetDeck)}</span>
           <span className="ml-2 px-2 py-0.5 rounded bg-blue-700/60 text-xs">
             {selectedTargets.length}/{targetingEffect.name === 'Babe Swap' ? 2 : (((targetingEffect.target as any)?.kind === 'one-babe' ? 1 : (targetingEffect.target as any)?.min ?? 0))}
           </span>
@@ -443,7 +443,7 @@ export default function MainBoard({ deck, setDeck }: Props) {
   );
 }
 
-function buildTargetInstruction(t: TargetDecl): string {
+function buildTargetInstruction(t: TargetDeck): string {
   const from = (t as any).from;
   const where = from === "discard" ? "from the Discard Pile" : from === "deck" ? "from the Babe List" : "from the PlayArea";
   if (t.kind === "none") return "No targets needed.";
