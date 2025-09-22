@@ -33,6 +33,9 @@ type Props = {
   getDisabled?: (x: BabeCard | EffectScript) => { disabled: boolean; reason?: string };
   // Optional: pending-next info for deck badges
   pendingNext?: PendingNext;
+  // Optional: targeting context for deck highlighting (e.g., Babe Swap step 1)
+  targetingEffectName?: string;
+  selectedTargetIds?: string[];
 };
 
 export default function DeckPool({
@@ -53,6 +56,8 @@ export default function DeckPool({
   setSortDir,
   getDisabled,
   pendingNext,
+  targetingEffectName,
+  selectedTargetIds,
 }: Props) {
   const grouped = useMemo(() => {
     const map = new Map<string, (BabeCard | EffectScript)[]>();
@@ -113,11 +118,22 @@ export default function DeckPool({
                 {kind === "babe" && <option value="score">Score</option>}
               </select>
               <button
-                className="text-sm border rounded px-2 py-1"
+                className="text-sm border rounded px-2 py-1 flex items-center justify-center"
                 title={sortDir === "asc" ? "Ascending" : "Descending"}
+                aria-label={sortDir === "asc" ? "Sort ascending" : "Sort descending"}
                 onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
               >
-                {sortDir === "asc" ? "↗" : "↘"}
+                {sortDir === "asc" ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 17L17 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M11 7H17V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 7L17 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M11 17H17V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                )}
               </button>
             </>
           )}
@@ -163,12 +179,18 @@ export default function DeckPool({
                       const name = (x as any).name as string;
                       const desc = kind === "effect" ? ((x as EffectScript).description || "") : "";
                       const title = (disabledMeta?.reason) || (desc ? `${name} — ${desc}` : name);
+                      const isBabe = kind === "babe";
+                      const isSelected = isBabe && selectedTargetIds?.includes((x as BabeCard).id);
+                      const isEligible69 = isBabe && targetingEffectName === '69' && (x as BabeCard).baseScore === 6 && !isSelected && ((selectedTargetIds?.length ?? 0) < 3);
+                      const rowHighlight = isSelected
+                        ? ' ring-2 ring-green-500 bg-green-50'
+                        : (isEligible69 ? ' ring-1 ring-amber-300 bg-amber-50' : '');
                       return (
                         <div
                           key={(x as any).id}
                           className={
-                            "flex items-start gap-2 text-sm cursor-pointer rounded px-1 py-1 " +
-                            (disabledMeta?.disabled ? "opacity-50 pointer-events-none" : "hover:bg-gray-50")
+                            ("flex items-start gap-2 text-sm cursor-pointer rounded px-1 py-1 " +
+                            (disabledMeta?.disabled ? "opacity-50 pointer-events-none" : "hover:bg-gray-50")) + rowHighlight
                           }
                           onClick={() => disabledMeta?.disabled
                             ? undefined
@@ -203,30 +225,56 @@ export default function DeckPool({
                 ) : (
                   // <- auto-fill grid: uses all available width with min 200px
                   <div className="grid [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))] gap-3">
-                    {list.map((x) => (
-                      <div
-                        key={(x as any).id}
-                        className={
-                          "relative cursor-pointer transition-transform active:scale-[0.98] " +
-                          (getDisabled && getDisabled(x).disabled ? "opacity-50 pointer-events-none" : "")
-                        }
-                        onClick={() => (getDisabled && getDisabled(x).disabled)
-                          ? undefined
-                          : (kind === "babe" ? onAddBabe?.(x as BabeCard) : onAddEffect?.(x as EffectScript))}
-                        title={(getDisabled && getDisabled(x).reason) || (x as any).name}
-                      >
-                        {kind === "babe" ? (
-                          <BabeBadge b={x as BabeCard} size={{ w: 200, h: 280 }} />
-                        ) : (
-                          <EffectBadge e={x as EffectScript} size={{ w: 200, h: 280 }} />
-                        )}
-                        {kind === "babe" && pendingNext?.babeMultNext?.[(x as BabeCard).id] && pendingNext!.babeMultNext![(x as BabeCard).id]! > 1 && (
-                          <div className="absolute right-1 top-1 z-10 text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white shadow" title={`Multiplied x${pendingNext!.babeMultNext![(x as BabeCard).id]} if played this turn`}>
-                            x{pendingNext!.babeMultNext![(x as BabeCard).id]}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {list.map((x) => {
+                      const disabledMeta = getDisabled && getDisabled(x);
+                      const handleClick = () => {
+                        if (disabledMeta?.disabled) return;
+                        if (kind === "babe") onAddBabe?.(x as BabeCard); else onAddEffect?.(x as EffectScript);
+                      };
+                      const isBabe = kind === 'babe';
+                      const isSelected = isBabe && selectedTargetIds?.includes((x as BabeCard).id);
+                      const isEligible69 = isBabe && targetingEffectName === '69' && (x as BabeCard).baseScore === 6 && !isSelected && ((selectedTargetIds?.length ?? 0) < 3);
+                      const extraClass = isSelected
+                        ? ' ring-4 ring-green-500'
+                        : (isEligible69 ? ' ring-2 ring-amber-400' : '');
+                      return (
+                        <div
+                          key={(x as any).id}
+                          className={(disabledMeta?.disabled ? "opacity-50 " : "") + "relative pointer-events-none"}
+                          title={(disabledMeta?.reason) || (x as any).name}
+                        >
+                          {kind === "babe" ? (
+                            <BabeBadge
+                              b={x as BabeCard}
+                              size={{ w: 200, h: 280 }}
+                              className={
+                                ((targetingEffectName === 'Babe Swap' && ((selectedTargetIds?.length ?? 0) === 0))
+                                  ? 'ring-2 ring-blue-500 '
+                                  : '') +
+                                (extraClass ? (extraClass + ' ') : '') +
+                                'pointer-events-auto'
+                              }
+                              onClick={handleClick}
+                            />
+                          ) : (
+                            <EffectBadge
+                              e={x as EffectScript}
+                              size={{ w: 200, h: 280 }}
+                              className="pointer-events-auto"
+                              onClick={handleClick as any}
+                            />
+                          )}
+                          {isBabe && isSelected && (
+                            <div className="absolute left-1 top-1 z-10 text-[10px] px-1.5 py-0.5 rounded bg-green-600 text-white shadow pointer-events-none">Selected</div>
+                          )}
+                          {kind === "babe" && pendingNext?.babeMultNext?.[(x as BabeCard).id] && pendingNext!.babeMultNext![(x as BabeCard).id]! > 1 && (
+                            <div className="absolute right-1 top-1 z-10 text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white shadow pointer-events-none" title={`Multiplied x${pendingNext!.babeMultNext![(x as BabeCard).id]} if played this turn`}>
+                              x{pendingNext!.babeMultNext![(x as BabeCard).id]}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )
               )}

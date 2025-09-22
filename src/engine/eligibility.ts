@@ -5,6 +5,17 @@ import { computeLimits } from "./limits";
 export type Eligibility = { ok: true; reason?: undefined } | { ok: false; reason: string };
 
 export function checkEligibility(effect: BoundEffect | Omit<BoundEffect,"playId">, state: EngineState): Eligibility {
+  // Special signature gating: Wilde Card requires that a Lucie Wilde variant
+  // has been played this game (in play or in discard). Opponent clause ignored.
+  if ((effect as any).name === "Wilde Card") {
+    const hasLucie = state.playedBabes.some(b => (b.name || "").toUpperCase().startsWith("LUCIE WILDE"))
+      || state.discardPile.some(b => (b.name || "").toUpperCase().startsWith("LUCIE WILDE"))
+      || (state as any).playedHistoryBabeNames?.some?.((n: string) => (n || "").toUpperCase().startsWith("LUCIE WILDE"));
+    if (!hasLucie) {
+      return { ok: false, reason: "Requires having played Lucie Wilde this game." };
+    }
+  }
+
   if (effect.requires) {
     for (const r of effect.requires) {
       if (r.kind === "only-babe-played") {
@@ -60,6 +71,9 @@ export function checkEligibility(effect: BoundEffect | Omit<BoundEffect,"playId"
   if (t.kind === "none") return { ok: true };
 
   const from = t.from || "play";
+  // We don't have deck contents in EngineState; deck targeting is handled by the UI.
+  // So don't block effects that target from 'deck' here.
+  if (from === "deck") return { ok: true };
   const candidates = from === "play" ? state.playedBabes : from === "discard" ? state.discardPile : [];
   const filtered = t.ofType ? candidates.filter(b => b.type === t.ofType) : candidates;
 

@@ -6,9 +6,11 @@ type Props = {
   // Accept both authored scripts and played/bound instances
   e: EffectScript | BoundEffect;
   size?: { w: number; h: number }; // default 200x280
+  className?: string;
+  onClick?: () => void;
 };
 
-export default function EffectBadge({ e, size }: Props) {
+export default function EffectBadge({ e, size, className, onClick }: Props) {
   const lib = useGifLibrary();
 
   // Defensive normalization — NEVER pass undefined to the gif helper
@@ -29,12 +31,13 @@ export default function EffectBadge({ e, size }: Props) {
 
   return (
     <div
-      className="relative rounded overflow-hidden shadow bg-white"
+      className={("relative rounded overflow-hidden shadow bg-white" + (className ? " " + className : "")).trim()}
       style={{ width: W, height: H }}
       title={name || "Effect"}
+      onClick={onClick}
     >
       {url ? (
-        <img src={url} alt={name || "Effect"} className="object-cover w-full h-full" />
+        <img src={url} alt={name || "Effect"} className="object-cover w-full h-full pointer-events-none" />
       ) : (
         <div className="flex items-center justify-center w-full h-full bg-gray-200 text-sm text-gray-700 px-2 text-center">
           {name || "Unknown Effect"}

@@ -1,0 +1,154 @@
+/* Theme overrides layered on top of Tailwind utilities.
+   We scope using a class on <html> or <body>: theme-default | theme-light | theme-dark | theme-battle */
+
+/* Base reset for theme-able surfaces */
+.theme-light, .theme-dark, .theme-battle {
+  --panel-bg: rgba(255,255,255,0.88);
+  --panel-border: rgba(0,0,0,0.1);
+  --text: #1f2937; /* gray-800 */
+  --muted: #6b7280; /* gray-500 */
+  --accent: #2563eb; /* blue-600 */
+  --accent-contrast: #ffffff;
+  --surface: #f3f4f6; /* gray-100 */
+}
+
+.theme-dark {
+  /* Darker, higher-contrast */
+  --panel-bg: rgba(8,12,20,0.94);
+  --panel-border: rgba(255,255,255,0.06);
+  --text: #e5e7eb; /* gray-200 */
+  --muted: #9ca3af; /* gray-400 */
+  --accent: #3b82f6; /* blue-500 */
+  --accent-contrast: #0a0f1b;
+  --surface: #05070c; /* deeper dark */
+  /* Hint UA to render native controls in dark */
+  color-scheme: dark;
+}
+
+.theme-battle {
+  /* Brighter, pinker Babe Battle vibe */
+  --panel-bg: rgba(255,245,252,0.96);
+  --panel-border: rgba(255,64,180,0.5);
+  --text: #19081a;
+  --muted: #6b7280;
+  /* Make primary accent strong blue; keep pink as secondary */
+  --accent: #3b82f6; /* vivid blue primary */
+  --accent2: #ff3bd1; /* bright pink secondary */
+  --accent-contrast: #ffffff;
+  /* Very pale blue overall background with soft glow; borders remain pink */
+  --surface: radial-gradient(1400px 900px at 15% -10%, rgba(191,219,254,0.35), transparent 60%),
+             radial-gradient(1200px 800px at 110% 15%, rgba(147,197,253,0.28), transparent 60%),
+             linear-gradient(180deg, #f5faff, #eef7ff 40%, #f7fbff 100%);
+  /* Keep native controls light to match bright theme */
+  color-scheme: light;
+}
+
+/* Apply to page */
+.theme-light body, .theme-dark body, .theme-battle body {
+  background: var(--surface) !important;
+  color: var(--text);
+}
+
+/* Panels commonly used across app */
+.theme-light .bg-white, .theme-dark .bg-white, .theme-battle .bg-white,
+.theme-light .bg-white\/80, .theme-dark .bg-white\/80, .theme-battle .bg-white\/80,
+.theme-light .bg-white\/90, .theme-dark .bg-white\/90, .theme-battle .bg-white\/90 {
+  background-color: var(--panel-bg) !important;
+}
+
+.theme-light .border, .theme-dark .border, .theme-battle .border,
+.theme-light .rounded-xl, .theme-dark .rounded-xl, .theme-battle .rounded-xl {
+  border-color: var(--panel-border) !important;
+}
+
+.theme-light .text-gray-600, .theme-dark .text-gray-600, .theme-battle .text-gray-600,
+.theme-light .text-gray-500, .theme-dark .text-gray-500, .theme-battle .text-gray-500 {
+  color: var(--muted) !important;
+}
+
+/* Dark-mode visibility tweaks */
+.theme-dark .border { border-color: rgba(255,255,255,0.12) !important; }
+.theme-dark .text-gray-700 { color: var(--text) !important; }
+.theme-dark .text-gray-400 { color: #a9b5c3 !important; }
+.theme-dark .bg-gray-100 { background-color: rgba(255,255,255,0.12) !important; }
+.theme-dark .bg-gray-200 { background-color: rgba(255,255,255,0.18) !important; }
+.theme-dark .bg-blue-50 { background-color: rgba(59,130,246,0.18) !important; }
+.theme-dark .bg-gray-50 { background-color: var(--panel-bg) !important; }
+.theme-dark .bg-gray-50 thead th { color: #cbd5e1 !important; }
+.theme-dark .bg-gray-50 tbody td { color: var(--text) !important; }
+.theme-dark .bg-gray-50 .text-gray-500 { color: #a9b5c3 !important; }
+.theme-dark .text-blue-700 { color: #93c5fd !important; }
+/* Fix compact list row hover (was stark white) */
+.theme-dark .hover\:bg-gray-50:hover { background-color: rgba(255,255,255,0.08) !important; color: var(--text) !important; }
+
+/* Light-mode compact list row hover (make it more visible over semi-white panels) */
+.theme-light .hover\:bg-gray-50:hover { background-color: rgba(0,0,0,0.06) !important; }
+
+/* Optional: Babe Battle subtle pink-tinted hover */
+.theme-battle .hover\:bg-gray-50:hover { background-color: rgba(255,59,209,0.08) !important; }
+
+/* Accent buttons */
+.theme-light .bg-blue-600, .theme-dark .bg-blue-600, .theme-battle .bg-blue-600,
+.theme-light .hover\:bg-blue-700:hover, .theme-dark .hover\:bg-blue-700:hover, .theme-battle .hover\:bg-blue-700:hover {
+  background-color: var(--accent) !important;
+  color: var(--accent-contrast) !important;
+}
+
+/* In Babe Battle, keep primary blue accents actually blue to mix with pink */
+.theme-battle .bg-blue-600 { background-color: var(--accent2) !important; }
+.theme-battle .hover\:bg-blue-700:hover { background-color: #2563eb !important; }
+.theme-battle .text-blue-600 { color: var(--accent2) !important; }
+.theme-battle .bg-blue-500 { background-color: #3b82f6 !important; }
+.theme-battle .bg-blue-700 { background-color: #1d4ed8 !important; }
+.theme-battle .text-blue-500 { color: #3b82f6 !important; }
+.theme-battle .text-blue-700 { color: #1d4ed8 !important; }
+.theme-battle .border-blue-500 { border-color: #3b82f6 !important; }
+.theme-battle .border-blue-600 { border-color: #2563eb !important; }
+.theme-battle .ring-blue-500, .theme-battle .ring-blue-600 { --tw-ring-color: rgba(59,130,246,0.7) !important; }
+
+/* Inputs */
+.theme-dark input, .theme-dark select, .theme-dark textarea, .theme-dark button,
+.theme-battle input, .theme-battle select, .theme-battle textarea, .theme-battle button { color: var(--text); }
+
+/* Form controls background/border for readability */
+.theme-dark input, .theme-dark select, .theme-dark textarea {
+  background-color: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+}
+.theme-dark select { color-scheme: dark; }
+.theme-dark select option { background-color: #111827; color: var(--text); }
+.theme-dark select option:hover,
+.theme-dark select option:focus,
+.theme-dark select option:checked,
+.theme-dark select:focus option:checked {
+  background-color: rgba(59,130,246,0.35) !important; /* blue tint on hover/active */
+  color: #ffffff !important;
+}
+.theme-dark ::placeholder { color: #9ca3af; opacity: 0.9; }
+
+.theme-battle input, .theme-battle select, .theme-battle textarea {
+  background-color: rgba(255,255,255,0.96) !important;
+  border-color: rgba(255,64,180,0.4) !important;
+}
+.theme-battle select option { background-color: #fff0f8; color: var(--text); }
+.theme-battle select option:hover,
+.theme-battle select option:focus,
+.theme-battle select option:checked,
+.theme-battle select:focus option:checked {
+  background-color: rgba(255,59,209,0.25) !important; /* pink hover/active */
+  color: #19081a !important;
+}
+
+/* Babe Battle blue tints support */
+.theme-battle .bg-blue-50 { background-color: rgba(96,165,250,0.16) !important; }
+.theme-battle .text-blue-700 { color: #3b82f6 !important; }
+.theme-battle .ring-blue-500 { --tw-ring-color: rgba(96,165,250,0.8) !important; }
+
+/* Babe Battle extras */
+.theme-battle .battle-title {
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+  color: #ff2bbf;
+  text-shadow: 0 0 0 #fff, 0 0 6px #fff, 0 0 18px #ff2bbf;
+}
+.theme-battle .bg-gray-50 { background-color: #fff0f8 !important; }
+.theme-battle .bg-white\/80, .theme-battle .bg-white\/90 { background-color: rgba(255,245,252,0.96) !important; }

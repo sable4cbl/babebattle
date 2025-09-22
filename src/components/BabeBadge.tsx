@@ -7,9 +7,10 @@ type Props = {
   size?: { w: number; h: number }; // default 200x280
   onClick?: () => void;
   muted?: boolean;
+  className?: string;
 };
 
-export default function BabeBadge({ b, size, onClick, muted }: Props) {
+export default function BabeBadge({ b, size, onClick, muted, className }: Props) {
   const lib = useGifLibrary();
   const url = lib.getBabeURL({
     type: (b as any).type,
@@ -23,14 +24,14 @@ export default function BabeBadge({ b, size, onClick, muted }: Props) {
   return (
     <div
       className={
-        "relative rounded overflow-hidden shadow " +
-        (muted ? "opacity-50" : "bg-white")
+        ("relative rounded overflow-hidden shadow " + (muted ? "opacity-50" : "bg-white")).trim() +
+        (className ? " " + className : "")
       }
       style={{ width: W, height: H, cursor: onClick ? "pointer" : "default" }}
       onClick={onClick}
     >
       {url ? (
-        <img src={url} alt={b.name} className="object-cover w-full h-full" />
+        <img src={url} alt={b.name} className="object-cover w-full h-full pointer-events-none" />
       ) : (
         <div className="flex items-center justify-center w-full h-full bg-gray-200 text-sm text-gray-700 px-2 text-center">
           {b.name}

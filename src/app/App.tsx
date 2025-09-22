@@ -4,6 +4,7 @@ import ErrorBoundary from "../components/core/ErrorBoundary";
 import type { BabeCard } from "../types/cards";
 import type { EffectScript } from "../types/effects";
 import MainBoard from "./MainBoard";
+import ThemeSwitcher from "../components/ThemeSwitcher";
 
 export type DeckState = { babes: BabeCard[]; effects: EffectScript[] };
 
@@ -32,6 +33,9 @@ export default function App() {
     <ErrorBoundary>
       {!deck ? (
         <div className="p-6 max-w-6xl mx-auto w-full">
+          <div className="fixed bottom-3 right-3 z-50">
+            <ThemeSwitcher />
+          </div>
           <h1 className="text-2xl font-bold mb-4">Import your Deck</h1>
           <ImportDeckPanel onImported={setDeckSafe} />
         </div>

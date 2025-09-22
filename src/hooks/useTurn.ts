@@ -35,6 +35,11 @@ export function useTurn(cfg?: TurnApiConfig) {
   const [strokesThisTurn, setStrokesThisTurn] = useState(0);
   const computedLimits = DEFAULT_LIMITS;
   const [pendingNext, setPendingNext] = useState<PendingNext | undefined>(undefined);
+  // Track names of babes that have been played at least once this game
+  const [playedHistoryBabeNames, setPlayedHistoryBabeNames] = useState<string[]>([]);
+
+  // Preserve pristine EffectScript by id when moved from Deck → Play, so we can restore cleanly on cancel/remove
+  const [effectOriginalById, setEffectOriginalById] = useState<Record<string, EffectScript>>({});
 
   // score (base only for now)
   const finalScore = useMemo(
@@ -68,6 +73,7 @@ export function useTurn(cfg?: TurnApiConfig) {
     (b: BabeCard) => {
       setPlayedBabes(prev => (prev.some(x => x.id === b.id) ? prev : [...prev, b]));
       deckRemoveBabe(b.id); // hide from deck immediately
+      setPlayedHistoryBabeNames(prev => (prev.includes(b.name) ? prev : [...prev, b.name]));
     },
     [deckRemoveBabe]
   );
@@ -79,6 +85,7 @@ export function useTurn(cfg?: TurnApiConfig) {
       if (ix === -1) return prev;
       const b = prev.babes[ix];
       setPlayedBabes(pb => (pb.some(x => x.id === id) ? pb : [...pb, b]));
+      setPlayedHistoryBabeNames(prev => (prev.includes(b.name) ? prev : [...prev, b.name]));
       const nextBabes = prev.babes.slice();
       nextBabes.splice(ix, 1);
       return { ...prev, babes: nextBabes };
@@ -94,6 +101,7 @@ export function useTurn(cfg?: TurnApiConfig) {
       if (ix === -1) return prev;
       const b = prev.babes[ix];
       setPlayedBabes(pb => (pb.some(x => x.id === id) ? pb : [...pb, b]));
+      setPlayedHistoryBabeNames(prev => (prev.includes(b.name) ? prev : [...prev, b.name]));
       const nextBabes = prev.babes.slice();
       nextBabes.splice(ix, 1);
       return { ...prev, babes: nextBabes };
@@ -124,6 +132,12 @@ export function useTurn(cfg?: TurnApiConfig) {
   const playEffect = useCallback(
     (e: EffectScript) => {
       const bound: BoundEffect = { ...e, playId: uid() };
+      // Capture pristine script from deck (before removal) for later restoration
+      try {
+        const deckList = cfg?.getDeckEffects?.() || [];
+        const orig = deckList.find(x => x.id === e.id);
+        if (orig) setEffectOriginalById(map => (map[e.id] ? map : { ...map, [e.id]: orig }));
+      } catch {}
       setPlayedEffects(prev => [...prev, bound]);
       deckRemoveEffect(e.id); // hide from deck immediately
     },
@@ -132,6 +146,12 @@ export function useTurn(cfg?: TurnApiConfig) {
 
   const playBoundEffect = useCallback(
     (e: BoundEffect) => {
+      // Capture pristine script from deck (before removal) for later restoration
+      try {
+        const deckList = cfg?.getDeckEffects?.() || [];
+        const orig = deckList.find(x => x.id === e.id);
+        if (orig) setEffectOriginalById(map => (map[e.id] ? map : { ...map, [e.id]: orig as EffectScript }));
+      } catch {}
       setPlayedEffects(prev => [...prev, e]);
       deckRemoveEffect(e.id);
     },
@@ -200,7 +220,58 @@ export function useTurn(cfg?: TurnApiConfig) {
             });
           }
         }
-        deckAddEffect(eff); // back to deck (effect script fields are in the bound object)
+        // If effect moved list items between deck and discard (e.g., Babe Swap), revert those moves
+        const listSwaps = (eff as any).listSwaps as { deckToDiscardIds?: string[]; discardToDeckIds?: string[] } | undefined;
+        if (listSwaps) {
+          const toDeck = listSwaps.deckToDiscardIds || [];
+          const toDiscard = listSwaps.discardToDeckIds || [];
+          if (toDeck.length) {
+            setDiscard(d => {
+              const keep = d.babes.filter(b => !toDeck.includes(b.id));
+              const moved = d.babes.filter(b => toDeck.includes(b.id));
+              if (moved.length) {
+                cfg?.setDeckBabes(prevDeck => {
+                  const existing = new Set(prevDeck.map(x => x.id));
+                  const add = moved.filter(b => !existing.has(b.id));
+                  return [...prevDeck, ...add];
+                });
+              }
+              return { ...d, babes: keep };
+            });
+          }
+          if (toDiscard.length) {
+            const deckNow2 = cfg?.getDeckBabes?.() || [];
+            const moved2 = deckNow2.filter(b => toDiscard.includes(b.id));
+            if (moved2.length) {
+              cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !toDiscard.includes(b.id)));
+              setDiscard(d => {
+                const existing = new Set(d.babes.map(x => x.id));
+                const add = moved2.filter(b => !existing.has(b.id));
+                return { ...d, babes: [...d.babes, ...add] };
+              });
+            }
+          }
+        }
+        // Back to deck: restore pristine script if captured; otherwise, strip bound-only fields
+        const restore: EffectScript | undefined = effectOriginalById[eff.id];
+        if (restore) {
+          deckAddEffect(restore);
+          setEffectOriginalById(map => { const { [eff.id]: _, ...rest } = map; return rest; });
+        } else {
+          const {
+            playId: _playId,
+            boundTargetIds: _bt,
+            boundTargetType: _btt,
+            boundDiscards: _bd,
+            boundPlayedFromDiscard: _bpfd,
+            strokeCost: _sc,
+            dynamicStrokeTargetId: _dstid,
+            dynamicStrokeKind: _dsk,
+            listSwaps: _ls,
+            ...rest
+          } = eff as any;
+          deckAddEffect(rest as EffectScript);
+        }
         const next = prev.slice();
         next.splice(ix, 1);
 
@@ -243,7 +314,60 @@ export function useTurn(cfg?: TurnApiConfig) {
   const addStrokes = useCallback((n: number) => setStrokesThisTurn(s => s + n), []);
 
   // --- Turn lifecycle ---
-const resetTurn = useCallback(() => {
+  const resetTurn = useCallback(() => {
+    // Revert any list moves caused by effects (e.g., Handbra discard->deck, Babe Swap deck<->discard)
+    setPlayedEffects(prev => {
+      // Undo boundDiscards: move ids from Deck back to Discard
+      const boundIds: string[] = [];
+      const swapToDeck: string[] = [];
+      const swapToDiscard: string[] = [];
+      prev.forEach(eff => {
+        const bd = (eff as any).boundDiscards?.babeIds as string[] | undefined;
+        if (bd && bd.length) boundIds.push(...bd);
+        const swaps = (eff as any).listSwaps as { deckToDiscardIds?: string[]; discardToDeckIds?: string[] } | undefined;
+        if (swaps?.deckToDiscardIds?.length) swapToDeck.push(...swaps.deckToDiscardIds);
+        if (swaps?.discardToDeckIds?.length) swapToDiscard.push(...swaps.discardToDeckIds);
+      });
+      if (boundIds.length) {
+        const deckNow = cfg?.getDeckBabes?.() || [];
+        const moved = deckNow.filter(b => boundIds.includes(b.id));
+        if (moved.length) {
+          cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !boundIds.includes(b.id)));
+          setDiscard(d => {
+            const existing = new Set(d.babes.map(x => x.id));
+            const add = moved.filter(b => !existing.has(b.id));
+            return { ...d, babes: [...d.babes, ...add] };
+          });
+        }
+      }
+      if (swapToDeck.length) {
+        setDiscard(d => {
+          const keep = d.babes.filter(b => !swapToDeck.includes(b.id));
+          const moved = d.babes.filter(b => swapToDeck.includes(b.id));
+          if (moved.length) {
+            cfg?.setDeckBabes(prevDeck => {
+              const existing = new Set(prevDeck.map(x => x.id));
+              const add = moved.filter(b => !existing.has(b.id));
+              return [...prevDeck, ...add];
+            });
+          }
+          return { ...d, babes: keep };
+        });
+      }
+      if (swapToDiscard.length) {
+        const deckNow = cfg?.getDeckBabes?.() || [];
+        const moved = deckNow.filter(b => swapToDiscard.includes(b.id));
+        if (moved.length) {
+          cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !swapToDiscard.includes(b.id)));
+          setDiscard(d => {
+            const existing = new Set(d.babes.map(x => x.id));
+            const add = moved.filter(b => !existing.has(b.id));
+            return { ...d, babes: [...d.babes, ...add] };
+          });
+        }
+      }
+      return prev;
+    });
     // Play -> Deck
     setPlayedBabes(prev => {
       // Cancel turn: send babes that came from discard back to Discard, others back to Deck
@@ -268,22 +392,37 @@ const resetTurn = useCallback(() => {
       toDeck.forEach(deckAddBabe);
       return [];
     });
-    // Return all played effects to deck and clear
-    setPlayedEffects(prev => { prev.forEach(pe => deckAddEffect(pe)); return [] });
+    // Return all played effects to deck (restore pristine when possible) and clear
+    setPlayedEffects(prev => {
+      prev.forEach(pe => {
+        const restore = effectOriginalById[pe.id];
+        if (restore) {
+          deckAddEffect(restore);
+        } else {
+          const { playId, boundTargetIds, boundTargetType, boundDiscards, boundPlayedFromDiscard, strokeCost, dynamicStrokeTargetId, dynamicStrokeKind, listSwaps, ...rest } = pe as any;
+          deckAddEffect(rest as EffectScript);
+        }
+      });
+      return []
+    });
     setStrokesThisTurn(0);
     setPlayedFromDiscardIds([]);
     setPlayedFromDiscardImmediateIds([]);
     setPlayedFromPendingNextIds([]);
     setPlayedFromPendingNextIds([]);
-  }, [deckAddBabe, deckAddEffect, playedFromDiscardIds, playedFromDiscardImmediateIds]);
+    // Clear captured originals
+    setEffectOriginalById({});
+  }, [deckAddBabe, deckAddEffect, playedFromDiscardIds, playedFromDiscardImmediateIds, effectOriginalById]);
 
-const endTurn = useCallback(() => {
+  const endTurn = useCallback(() => {
     // compute next-turn carryover (replays, adds/mults) before clearing play
     const next = computeScore({
       playedBabes,
       playedEffects,
       discardPile: [],
-      pendingNext: undefined,
+      // Include existing pendingNext so turn+2 carry-overs (e.g., addNextNext) shift properly
+      pendingNext,
+      playedHistoryBabeNames,
     }).nextPending;
     // Determine if any played babes should go to Deck instead of Discard (e.g., Side Boob)
     const endMoveToDeckIds = new Set<string>();
@@ -342,6 +481,20 @@ const endTurn = useCallback(() => {
     });
   }, [cfg]);
 
+  // Move a specific babe from Deck to Discard (effects like Babe Swap)
+  const moveDeckBabeToDiscard = useCallback((id: string) => {
+    if (!cfg) return;
+    const deckList = cfg.getDeckBabes();
+    const ix = deckList.findIndex(b => b.id === id);
+    if (ix === -1) return;
+    const b = deckList[ix];
+    cfg.setDeckBabes(prev => prev.filter(x => x.id !== id));
+    setDiscard(d => {
+      const exists = new Set(d.babes.map(x => x.id));
+      return exists.has(id) ? d : { ...d, babes: [...d.babes, b] };
+    });
+  }, [cfg]);
+
   const bindEffect = useCallback((_babeId: string) => {}, []);
   const confirmTargets = useCallback(() => {}, []);
   const cancelTargets = useCallback(() => {}, []);
@@ -377,6 +530,7 @@ const endTurn = useCallback(() => {
     discard, // { babes: BabeCard[]; effects: EffectScript[] }
     computedLimits,
     finalScore,
+    playedHistoryBabeNames,
     freeBabeIdsThisTurn: Array.from(new Set([
       ...playedFromDiscardImmediateIds,
       ...playedFromPendingNextIds,
@@ -395,6 +549,7 @@ const endTurn = useCallback(() => {
     endTurn,
     returnDiscardToDeck,
     moveDiscardBabeToDeck,
+    moveDeckBabeToDiscard,
     replayBabeFromDiscard,
     playBabeFromDiscardImmediate,
     playBabeFromDiscardCounted,

@@ -31,10 +31,27 @@ export function computeScore(state: EngineState): EngineResult {
     final = perBabe.reduce((a, x) => a + x.total, 0);
   }
 
+  // Collect final-scope operations to enforce ordering: all adds before any multipliers
+  const finalAddQueue: Array<{ name: string; amount: number }> = [];
+  const finalMultQueue: Array<{ name: string; mult: number }> = [];
+
   for (const e of state.playedEffects) {
     if (!e.score || e.score.length === 0) continue;
 
     for (const op of e.score) {
+      // Special case: Late Bloomer conditional triple (only if Emily Bloom is the only babe played)
+      if (
+        e.name === "Late Bloomer" &&
+        (op as any)?.scope === "babe" && (op as any)?.appliesTo === "all-of-type" && (op as any)?.ofType === "BADDIE"
+      ) {
+        const onlyEmily =
+          state.playedBabes.length === 1 &&
+          (state.playedBabes[0].name || "").toUpperCase().startsWith("EMILY BLOOM");
+        if (!onlyEmily) {
+          // Skip this op if condition not met; continue to next op
+          continue;
+        }
+      }
       if (op.scope === "final-per-babe") {
         if (op.whenAllPlayedAreType) {
           const allMatch = state.playedBabes.length > 0 && state.playedBabes.every(b => b.type === op.whenAllPlayedAreType);
@@ -46,20 +63,14 @@ export function computeScore(state: EngineState): EngineResult {
           ? state.playedBabes.filter((b) => b.type === op.ofType).length
           : state.playedBabes.length;
         const addAmt = op.amount * count;
-        final += addAmt;
-        log.push(`${e.name}: +${addAmt} Final`);
-        overallOps.push({ name: e.name, op: "add", amount: addAmt });
+        finalAddQueue.push({ name: e.name, amount: addAmt });
         continue;
       }
       if (op.scope === "final") {
         if (op.op === "add") {
-          final += op.amount;
-          log.push(`${e.name}: +${op.amount} Final`);
-          overallOps.push({ name: e.name, op: "add", amount: op.amount });
+          finalAddQueue.push({ name: e.name, amount: op.amount });
         } else if (op.op === "mult") {
-          final *= op.amount;
-          log.push(`${e.name}: x${op.amount} Final`);
-          overallOps.push({ name: e.name, op: "mult", amount: op.amount });
+          finalMultQueue.push({ name: e.name, mult: op.amount });
         } else if (op.op === "add-target-base") {
           const ids = new Set(e.boundTargetIds ?? []);
           // Always add the chosen babe's original base score, regardless of current zone.
@@ -78,9 +89,7 @@ export function computeScore(state: EngineState): EngineResult {
             ? op.whenOnlyEffectMultiplier
             : op.multiplier;
           const addAmt = baseSum * mult;
-          final += addAmt;
-          log.push(`${e.name}: +${addAmt} Final`);
-          overallOps.push({ name: e.name, op: "add", amount: addAmt });
+          finalAddQueue.push({ name: e.name, amount: addAmt });
         }
         continue;
       }
@@ -98,18 +107,68 @@ export function computeScore(state: EngineState): EngineResult {
   // Sum of per-babe totals only (before any overall/final-scope or carry-over ops)
   score.finalBefore = perBabe.reduce((a, x) => a + x.total, 0);
 
-  if (state.pendingNext?.addNext) { final += state.pendingNext.addNext; log.push(`Carry-over: +${state.pendingNext.addNext}`); overallOps.push({ name: "Carry-over", op: "carry-add", amount: state.pendingNext.addNext }); }
+  // Incorporate carry-over adds/mults into the same ordered queues so that
+  // all adds (current + carry) happen before any multipliers (current + carry).
+  if (state.pendingNext?.addNext) {
+    const sources = state.pendingNext.addNextSources;
+    if (sources && sources.length) {
+      for (const s of sources) {
+        finalAddQueue.push({ name: `${s.name} (carry-over)`, amount: s.amount });
+      }
+    } else {
+      finalAddQueue.push({ name: 'Carry-over', amount: state.pendingNext.addNext });
+    }
+  }
   if (state.pendingNext?.multNext) {
-    final *= state.pendingNext.multNext;
-    log.push(`Carry-over: x${state.pendingNext.multNext}`);
-    overallOps.push({ name: "Carry-over", op: "carry-mult", amount: state.pendingNext.multNext });
+    const sources = (state.pendingNext as any).multNextSources as Array<{ name: string; mult: number }> | undefined;
+    if (sources && sources.length) {
+      for (const s of sources) {
+        finalMultQueue.push({ name: `${s.name} (carry-over)`, mult: s.mult });
+      }
+    } else {
+      finalMultQueue.push({ name: 'Carry-over', mult: state.pendingNext.multNext });
+    }
+  }
+
+  // Apply all collected Final adds first
+  if (finalAddQueue.length) {
+    for (const a of finalAddQueue) {
+      final += a.amount;
+      log.push(`${a.name}: +${a.amount} Final`);
+      overallOps.push({ name: a.name, op: "add", amount: a.amount });
+    }
+  }
+  // Then apply Final multipliers in order
+  if (finalMultQueue.length) {
+    for (const m of finalMultQueue) {
+      final *= m.mult;
+      log.push(`${m.name}: x${m.mult} Final`);
+      overallOps.push({ name: m.name, op: "mult", amount: m.mult });
+    }
   }
 
   score.finalAfter = Math.round(final);
-  const nextPending = collectNextPending(state.playedEffects, log);
+  const nextPending = collectNextPending(
+    state.playedEffects,
+    state.playedBabes,
+    state.discardPile,
+    state.playedHistoryBabeNames || [],
+    log
+  ) || {};
+  // Shift any existing turn+2 adds down to next turn, preserving source labels
+  if (state.pendingNext?.addNextNext) {
+    (nextPending as any).addNext = ((nextPending as any).addNext || 0) + state.pendingNext.addNextNext;
+    const shiftedSources = (state.pendingNext as any).addNextNextSources as Array<{ name: string; amount: number }> | undefined;
+    if (shiftedSources && shiftedSources.length) {
+      (nextPending as any).addNextSources = [
+        ...(((nextPending as any).addNextSources as Array<{ name: string; amount: number }>) || []),
+        ...shiftedSources,
+      ];
+    }
+  }
   const limits = computeLimits(state.playedEffects);
 
-  return { score, limits, nextPending, log, overallOps };
+  return { score, limits, nextPending: (Object.keys(nextPending).length ? nextPending : undefined), log, overallOps };
 }
 
 function resolveBabeTargets(
@@ -126,15 +185,47 @@ function resolveBabeTargets(
   return perBabe.filter(b => ids.has(b.id));
 }
 
-function collectNextPending(effects: BoundEffect[], log: string[]): PendingNext | undefined {
+function collectNextPending(
+  effects: BoundEffect[],
+  playedBabes: BabeCard[],
+  discardBabes: BabeCard[],
+  playedHistoryNames: string[],
+  log: string[]
+): PendingNext | undefined {
   let add = 0, mult = 1;
   let replay: string[] = [];
   let ignoreLimit = false;
   const babeMultNext: Record<string, number> = {};
+  let addNextNext = 0;
+  const addNextSources: Array<{ name: string; amount: number }> = [];
+  const addNextNextSources: Array<{ name: string; amount: number }> = [];
+  const multNextSources: Array<{ name: string; mult: number }> = [];
   for (const e of effects) {
     const f = e.future; if (!f) continue;
-    if (typeof f.nextAdd === "number") { add += f.nextAdd; log.push(`${e.name}: next +${f.nextAdd}`); }
-    if (typeof f.nextMult === "number") { mult *= f.nextMult; log.push(`${e.name}: next x${f.nextMult}`); }
+    if (typeof f.nextAdd === "number") { add += f.nextAdd; addNextSources.push({ name: e.name, amount: f.nextAdd }); log.push(`${e.name}: next +${f.nextAdd}`); }
+    if (typeof f.nextMult === "number") {
+      // Special case: Delish-Ious only doubles next turn if Alice Delish is the only babe played
+      if (e.name === "Delish-Ious") {
+        const onlyAlice =
+          playedBabes.length === 1 &&
+          (playedBabes[0].name || "").toUpperCase().startsWith("ALICE DELISH");
+        if (!onlyAlice) {
+          // Skip, condition not met
+        } else {
+          mult *= f.nextMult; multNextSources.push({ name: e.name, mult: f.nextMult }); log.push(`${e.name}: next x${f.nextMult}`);
+        }
+      } else if (e.name === "Wilde Card") {
+        // Wilde Card: if you played Lucie Wilde this game (in play or in discard), double next turn
+        const inPlay = playedBabes.some(b => (b.name || "").toUpperCase().startsWith("LUCIE WILDE"));
+        const inDiscard = discardBabes.some(b => (b.name || "").toUpperCase().startsWith("LUCIE WILDE"));
+        const inHistory = playedHistoryNames?.some?.(n => (n || "").toUpperCase().startsWith("LUCIE WILDE"));
+        if (inPlay || inDiscard || inHistory) {
+          mult *= f.nextMult; multNextSources.push({ name: e.name, mult: f.nextMult }); log.push(`${e.name}: next x${f.nextMult}`);
+        }
+      } else {
+        mult *= f.nextMult; multNextSources.push({ name: e.name, mult: f.nextMult }); log.push(`${e.name}: next x${f.nextMult}`);
+      }
+    }
     if (f.replayBabeNextTurn && e.boundTargetIds && e.boundTargetIds.length) {
       replay = replay.concat(e.boundTargetIds);
     }
@@ -143,6 +234,10 @@ function collectNextPending(effects: BoundEffect[], log: string[]): PendingNext 
       for (const id of e.boundTargetIds) babeMultNext[id] = f.targetsNextTurnMult;
       log.push(`${e.name}: next chosen target x${f.targetsNextTurnMult}`);
     }
+    if (typeof f.addNextNext === "number") {
+      addNextNext += f.addNextNext; addNextNextSources.push({ name: e.name, amount: f.addNextNext });
+      log.push(`${e.name}: +${f.addNextNext} in 2 turns`);
+    }
   }
   const payload: PendingNext = {};
   if (add !== 0) payload.addNext = add;
@@ -150,12 +245,12 @@ function collectNextPending(effects: BoundEffect[], log: string[]): PendingNext 
   if (replay.length) payload.replayBabeIds = Array.from(new Set(replay));
   if (ignoreLimit) payload.ignoreBabeLimitNext = true;
   if (Object.keys(babeMultNext).length) payload.babeMultNext = babeMultNext;
+  if (addNextNext !== 0) payload.addNextNext = addNextNext;
+  if (addNextSources.length) payload.addNextSources = addNextSources;
+  if (addNextNextSources.length) payload.addNextNextSources = addNextNextSources;
+  if (multNextSources.length) (payload as any).multNextSources = multNextSources;
   return Object.keys(payload).length ? payload : undefined;
 }
-
-
-
-
 
 
 

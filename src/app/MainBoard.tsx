@@ -9,6 +9,8 @@ import type { EffectScript, TargetDecl, BoundEffect } from "../types/effects";
 import { useComputedScore } from "../engine/useComputedScore";
 import { checkEligibility, computeScore } from "../engine";
 import { uid } from "../utils/uid";
+import Modal from "../components/Modal";
+import ThemeSwitcher from "../components/ThemeSwitcher";
 
 type DeckState = { babes: BabeCard[]; effects: EffectScript[] };
 
@@ -37,6 +39,9 @@ export default function MainBoard({ deck, setDeck }: Props) {
       setDeck((prev) => (prev ? { ...prev, effects: updater(prev.effects) } : prev)),
   });
 
+  // Choice modal state for special effects (e.g., Wilde Card)
+  const [choiceEffect, setChoiceEffect] = useState<EffectScript | null>(null);
+
   // Engine compute (final score + limits) — no auto targeting
   const { score, limits, log, overallOps } = useComputedScore({
     playedBabes: turn.playedBabes,
@@ -55,10 +60,43 @@ export default function MainBoard({ deck, setDeck }: Props) {
     [countingBabePlays, limits.babes]
   );
 
-  const canPlayEffect = useMemo(
-    () => limits.ignoreEffectLimit || turn.playedEffects.length < limits.effects,
-    [turn.playedEffects.length, limits.ignoreEffectLimit, limits.effects]
+  const countingEffectPlays = useMemo(
+    () => (turn.playedEffects as any[]).filter(pe => !pe?.freeEffect).length,
+    [turn.playedEffects]
   );
+  const canPlayEffect = useMemo(
+    () => limits.ignoreEffectLimit || countingEffectPlays < limits.effects,
+    [countingEffectPlays, limits.ignoreEffectLimit, limits.effects]
+  );
+
+  // Helper: finalize current selection for effect "69"
+  const finalize69 = (selIds: string[]) => {
+    if (!targetingEffect || targetingEffect.name !== "69" || selIds.length === 0) return;
+    const bound = { ...(targetingEffect as any), playId: uid(), boundTargetIds: selIds } as unknown as BoundEffect;
+    // Record list move so reset/remove can revert deck<->discard transitions
+    (bound as any).listSwaps = { deckToDiscardIds: selIds.slice() };
+    // Move selected from deck to discard
+    selIds.forEach(id => (turn as any).moveDeckBabeToDiscard?.(id));
+    // Add +9 per selected
+    const addAmt = selIds.length * 9;
+    (bound as any).score = [
+      ...(((targetingEffect as any).score || []) as any[]),
+      { scope: "final", op: "add", amount: addAmt },
+    ];
+    // Optional pay to triple
+    const pay = typeof window !== 'undefined' && window.confirm("Pay 69 Strokes to triple the Final Score?");
+    if (pay) {
+      (turn as any).addStrokes?.(69);
+      (bound as any).strokeCost = ((bound as any).strokeCost || 0) + 69;
+      (bound as any).score = [
+        ...((bound as any).score || []),
+        { scope: "final", op: "mult", amount: 3 },
+      ];
+    }
+    (turn as any).playBoundEffect(bound);
+    setTargetingEffect(null);
+    setSelectedTargets([]);
+  };
 
   // Keep your previous mapping for PlayArea visual keys
   const playedBabesForPlayArea = useMemo(
@@ -68,38 +106,79 @@ export default function MainBoard({ deck, setDeck }: Props) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
+      <div className="fixed bottom-3 right-3 z-50">
+        <ThemeSwitcher />
+      </div>
       {/* LEFT: Babes (deck zone) — reuse DeckPool for identical UI */}
       <div className="min-h-screen overflow-y-auto">
-        <DeckPool
-          title="Babes"
-          kind="babe"
-          poolBabes={deck.babes}
-          poolEffects={[]}
-          pendingNext={turn.pendingNext}
-          search={babeQuery}
-          setSearch={setBabeQuery}
-          compact={babeCompact}
-          setCompact={setBabeCompact}
-          sortKey={babeSortKey}
+          <DeckPool
+            title="Babes"
+            kind="babe"
+            poolBabes={deck.babes}
+            poolEffects={[]}
+            pendingNext={turn.pendingNext}
+            targetingEffectName={targetingEffect?.name || undefined}
+            selectedTargetIds={selectedTargets}
+            search={babeQuery}
+            setSearch={setBabeQuery}
+            compact={babeCompact}
+            setCompact={setBabeCompact}
+            sortKey={babeSortKey}
           setSortKey={setBabeSortKey}
           sortDir={babeSortDir}
           setSortDir={setBabeSortDir}
           getDisabled={(x) => {
+            // During targeting, allow only specific deck selections
+            if (targetingEffect) {
+              const allowBabeSwapDeckPick = targetingEffect.name === "Babe Swap" && selectedTargets.length === 0;
+              const allow69Pick = targetingEffect.name === "69" && selectedTargets.length < 3 && (x as BabeCard).baseScore === 6;
+              // If the current card is a valid target for the active effect, enable it regardless of play limits
+              if (allowBabeSwapDeckPick || allow69Pick) return { disabled: false };
+              return { disabled: true, reason: "Selecting target" };
+            }
             // Check base babe limit first; allow extra type-scoped slots when at cap
             const b = x as BabeCard;
-            const atBaseCap = countingBabePlays >= limits.babes;
-            if (atBaseCap) {
+            const wouldBeCount = countingBabePlays + 1;
+            if (wouldBeCount > limits.babes) {
               const extraMap = (limits as any).extraBabesByType as Record<string, number> | undefined;
-              const extraForType = extraMap?.[b.type] ?? 0;
-              const wouldBeCount = countingBabePlays + 1;
-              const allowWithTypeExtra = extraForType > 0 && wouldBeCount <= (limits.babes + extraForType);
-              if (!allowWithTypeExtra) return { disabled: true, reason: "Babe limit reached" };
+              if (!extraMap) return { disabled: true, reason: "Babe limit reached" };
+              // Compute capacity contributed by extra slots given current babes AND the candidate
+              const counts: Record<string, number> = {};
+              for (const pb of turn.playedBabes) counts[pb.type] = (counts[pb.type] || 0) + 1;
+              counts[b.type] = (counts[b.type] || 0) + 1; // include the candidate
+              let capacity = 0;
+              for (const [t, extra] of Object.entries(extraMap)) {
+                const avail = typeof extra === 'number' ? extra : 0;
+                capacity += Math.min(avail, counts[t] || 0);
+              }
+              if (wouldBeCount > limits.babes + capacity) {
+                return { disabled: true, reason: "Babe limit reached" };
+              }
             }
             const onlyType = (limits as any).restrictBabeTypeTo as BabeCard["type"] | undefined;
             if (onlyType && b.type !== onlyType) return { disabled: true, reason: `Only ${onlyType} babes this turn` };
             return { disabled: false };
           }}
-          onAddBabe={(b) => { turn.playBabe(b); }}
+          onAddBabe={(b) => {
+            // If targeting, hijack click for specific deck selections
+            if (targetingEffect) {
+              if (targetingEffect.name === "Babe Swap" && selectedTargets.length === 0) {
+                setSelectedTargets((prev) => (prev.includes(b.id) ? prev : [...prev, b.id]));
+                return;
+              }
+              if (targetingEffect.name === "69") {
+                if (b.baseScore !== 6 || selectedTargets.includes(b.id) || selectedTargets.length >= 3) return;
+                const nextSel = [...selectedTargets, b.id];
+                setSelectedTargets(nextSel);
+                if (nextSel.length >= 3) {
+                  finalize69(nextSel);
+                }
+                return;
+              }
+              return;
+            }
+            turn.playBabe(b);
+          }}
           onAddEffect={undefined}
           onAddAll={undefined}
         />
@@ -116,11 +195,14 @@ export default function MainBoard({ deck, setDeck }: Props) {
               playedBabes={playedBabesForPlayArea}
               playedEffects={turn.playedEffects as any}
               limits={limits}
+              targetingEffectName={targetingEffect?.name || undefined}
               onRemoveBabe={(id: string) => turn.removePlayedBabe(id)}
               onRemoveEffect={(id: string) => turn.removePlayedEffect(id)}
               onBindEffect={(babeId: string) => {
   if (!targetingEffect) return;
   const t: any = targetingEffect.target;
+  // Do not allow binding from PlayArea when the effect expects selection from Deck (Babe List)
+  if ((t.from ?? "play") === "deck") return;
   const inPlay = turn.playedBabes.find(b => b.id === babeId);
   const inDiscard = (turn.discard?.babes || []).find(b => b.id === babeId);
   const babe = inPlay || inDiscard;
@@ -139,7 +221,7 @@ export default function MainBoard({ deck, setDeck }: Props) {
   if (selectedTargets.includes(babeId)) return;
   const next = [...selectedTargets, babeId];
   setSelectedTargets(next);
-  const need = t.kind === "one-babe" ? 1 : t.min;
+  const need = targetingEffect.name === "Babe Swap" ? 2 : (t.kind === "one-babe" ? 1 : t.min);
   if (next.length >= need) {
     const bound = { ...targetingEffect, playId: uid(), boundTargetIds: next, boundTargetType: t.ofType } as unknown as BoundEffect;
 
@@ -180,6 +262,19 @@ export default function MainBoard({ deck, setDeck }: Props) {
       const chosen = next[0];
       (bound as any).endMoveToDeckIds = next;
       (turn as any).playBabeFromDiscardImmediate?.(chosen);
+    }
+
+    // Babe Swap: discard 1 deck babe (selected first), and take 1 from Discard into Deck (selected second)
+    if (targetingEffect.name === "Babe Swap") {
+      const deckId = next[0];
+      const discardId = next[1];
+      (turn as any).moveDeckBabeToDiscard?.(deckId);
+      (turn as any).moveDiscardBabeToDeck?.(discardId);
+      // Store swaps so we can undo on remove/cancel
+      (bound as any).listSwaps = {
+        deckToDiscardIds: [deckId],
+        discardToDeckIds: [discardId],
+      };
     }
 
     // Sun Dress: triple target's base (handled by score op) and pay new base in strokes now
@@ -248,8 +343,10 @@ export default function MainBoard({ deck, setDeck }: Props) {
               playedEffects: (turn.playedEffects as unknown as BoundEffect[]) || [],
               discardPile: (turn.discard?.babes as BabeCard[]) || [],
               pendingNext: turn.pendingNext,
+              playedHistoryBabeNames: (turn as any).playedHistoryBabeNames,
             });
-            if (!canPlayEffect) return { disabled: true, reason: "Effect limit reached" };
+            const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes';
+            if (!canPlayEffect && !ignoreLimitForThisCard) return { disabled: true, reason: "Effect limit reached" };
             if (!elig.ok) return { disabled: true, reason: elig.reason };
             return { disabled: false };
           }}
@@ -260,9 +357,17 @@ export default function MainBoard({ deck, setDeck }: Props) {
               playedEffects: (turn.playedEffects as unknown as BoundEffect[]) || [],
               discardPile: (turn.discard?.babes as BabeCard[]) || [],
               pendingNext: turn.pendingNext,
+              playedHistoryBabeNames: (turn as any).playedHistoryBabeNames,
             });
-            if (!canPlayEffect || !elig.ok) return;
-            if (e.target.kind === "none") return turn.playEffect(e);
+            const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes';
+            if ((!canPlayEffect && !ignoreLimitForThisCard) || !elig.ok) return;
+            if (e.target.kind === "none") {
+              if (e.name === "Wilde Card") {
+                setChoiceEffect(e);
+                return;
+              }
+              return turn.playEffect(e);
+            }
             setTargetingEffect(e);
           }}
           onAddAll={undefined}
@@ -275,19 +380,28 @@ export default function MainBoard({ deck, setDeck }: Props) {
       {/* Targeting instruction toast + progress */}
       {targetingEffect && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white text-sm px-3 py-1.5 rounded shadow flex items-center gap-2">
-          <span>{buildTargetInstruction(targetingEffect.target as TargetDecl)}</span>
+          <span>{targetingEffect.name === 'Babe Swap' ? 'Select 1 Babe from the Babe List, then 1 Babe from the Discard Pile.' : buildTargetInstruction(targetingEffect.target as TargetDecl)}</span>
           <span className="ml-2 px-2 py-0.5 rounded bg-blue-700/60 text-xs">
-            {selectedTargets.length}/{((targetingEffect.target as any)?.kind === 'one-babe' ? 1 : (targetingEffect.target as any)?.min ?? 0)}
+            {selectedTargets.length}/{targetingEffect.name === 'Babe Swap' ? 2 : (((targetingEffect.target as any)?.kind === 'one-babe' ? 1 : (targetingEffect.target as any)?.min ?? 0))}
           </span>
           {selectedTargets.length > 0 && (
             <span className="flex items-center gap-1">
               {selectedTargets.map((id) => {
-                const babe = turn.playedBabes.find(b => b.id === id) || (turn.discard?.babes || []).find(b => b.id === id);
+                const babe = turn.playedBabes.find(b => b.id === id) || (turn.discard?.babes || []).find(b => b.id === id) || deck.babes.find(b => b.id === id);
                 return babe ? (
                   <span key={id} className="px-1.5 py-0.5 rounded bg-white/20 text-white text-xs">{babe.name}</span>
                 ) : null;
               })}
             </span>
+          )}
+          {targetingEffect?.name === '69' && selectedTargets.length > 0 && (
+            <button
+              className="ml-2 text-xs underline text-white/90 hover:text-white"
+              onClick={() => finalize69(selectedTargets)}
+              title="Finish selection"
+            >
+              Finish
+            </button>
           )}
           <button
             className="ml-2 text-xs underline text-white/90 hover:text-white"
@@ -298,6 +412,33 @@ export default function MainBoard({ deck, setDeck }: Props) {
           </button>
         </div>
       )}
+
+      {/* Choice modal for Wilde Card */}
+      <Modal open={!!choiceEffect} onClose={() => setChoiceEffect(null)} title={choiceEffect?.name || ''}>
+        <div className="flex items-stretch gap-3">
+          <button
+            className="flex-1 border rounded-md px-3 py-2 bg-white hover:bg-gray-50 text-left"
+            onClick={() => {
+              if (!choiceEffect) return;
+              turn.playEffect(choiceEffect);
+              setChoiceEffect(null);
+            }}
+          >
+            Double the next turn's Final Score
+          </button>
+          <button
+            className="flex-1 border rounded-md px-3 py-2 bg-white hover:bg-gray-50 text-left"
+            onClick={() => {
+              if (!choiceEffect) return;
+              const noOwnEffect = { ...(choiceEffect as any), future: undefined } as EffectScript;
+              turn.playEffect(noOwnEffect);
+              setChoiceEffect(null);
+            }}
+          >
+            Halve the Final Score of your Opponent's next turn.
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

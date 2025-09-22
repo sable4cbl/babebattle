@@ -1,5 +1,38 @@
 import type { EffectScript } from "../../types/effects";
+import { uid } from "../../utils/uid";
 import { stubEffect } from "./helpers";
+
+const implemented: EffectScript[] = [
+  {
+    id: uid(),
+    name: "Babe Swap",
+    group: "GENERIC",
+    target: { kind: "one-babe", from: "discard" },
+    description:
+      "Discard 1 Babe from your Deck. Choose 1 Babe from your Discard; add her to your Deck.",
+    gifName: "EFFECT Babe Swap.gif",
+  },
+  {
+    id: uid(),
+    name: "69",
+    group: "GENERIC",
+    target: { kind: "many-babes", min: 3, max: 3, from: "deck" },
+    description:
+      "Discard up to 3 Babes whose Base Score is 6. Add 9 Score for each one. You can pay 69 Strokes and triple the Final Score.",
+    gifName: "EFFECT 69.gif",
+  },
+  {
+    id: uid(),
+    name: "Pumping Frenzy",
+    group: "GENERIC",
+    target: { kind: "none" },
+    description: "Triple the Final Score.",
+    gifName: "EFFECT Pumping Frenzy.gif",
+    score: [
+      { scope: "final", op: "mult", amount: 3 },
+    ],
+  },
+];
 
 const names = [
   "7 Sins Envy",
@@ -10,7 +43,6 @@ const names = [
   "7 Sins Sloth",
   "7 Sins Wrath",
   "All Tied Up",
-  "Babe Swap",
   "Bad Girl",
   "Blowjob Bribe",
   "Cant Hold Em",
@@ -39,7 +71,6 @@ const names = [
   "Pay Me More!",
   "Porn Addict",
   "Pump Action",
-  "Pumping Frenzy",
   "Ready For Use",
   "Seductress",
   "Semen Extraction",
@@ -58,7 +89,7 @@ const names = [
   "Unload",
 ];
 
-export const GENERIC_EFFECTS: EffectScript[] = names.map((name) =>
-  stubEffect("GENERIC", name, `EFFECT ${name}.gif`)
-);
-
+export const GENERIC_EFFECTS: EffectScript[] = [
+  ...implemented,
+  ...names.map((name) => stubEffect("GENERIC", name, `EFFECT ${name}.gif`)),
+];

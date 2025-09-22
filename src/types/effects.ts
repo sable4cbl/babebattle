@@ -6,7 +6,7 @@ export type BabeSource = "play" | "deck" | "discard";
 
 
 
-export type TargetDecl =
+export type TargetDeck =
 
   | { kind: "none" }
 
@@ -105,6 +105,9 @@ export type FutureBuff = {
   // Apply a multiplier to any targeted babe(s) next turn, if played
   targetsNextTurnMult?: number;
 
+  // Carry-over add for turn+2 (used by some signature effects)
+  addNextNext?: number;
+
 };
 
 
@@ -125,7 +128,7 @@ export type EffectScript = {
 
 
 
-  target: TargetDecl;
+  target: TargetDeck;
 
   score?: ScoreOp[];
 
@@ -178,6 +181,14 @@ export type PendingNext = {
   // Per-babe multiplier to apply next turn if that babe is played
   babeMultNext?: Record<string, number>;
 
+  // Adds that will become addNext on the following turn
+  addNextNext?: number;
+
+  // Source labeling for carry-overs
+  addNextSources?: Array<{ name: string; amount: number }>;
+  addNextNextSources?: Array<{ name: string; amount: number }>;
+  multNextSources?: Array<{ name: string; mult: number }>;
+
 };
 
 
@@ -215,6 +226,9 @@ export type EngineState = {
   discardPile: BabeCard[];
 
   pendingNext?: PendingNext;
+
+  // Optional history across turns: names of babes that have been played this game
+  playedHistoryBabeNames?: string[];
 
 };
 
