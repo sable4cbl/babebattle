@@ -27,22 +27,46 @@ export type Recap = {
 export function useDeckImport(files: File[]) {
   const babeByGifRef = useRef<Map<string, BabeCard> | null>(null);
   const effectByGifRef = useRef<Map<string, EffectScript> | null>(null);
+  const babeByGifNormRef = useRef<Map<string, BabeCard> | null>(null);
+  const effectByGifNormRef = useRef<Map<string, EffectScript> | null>(null);
+
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/\.(gif|webp|png|jpg|jpeg)$/i, ".gif")
+      // treat underscores as spaces and collapse multiple spaces
+      .replace(/[_\s]+/g, " ")
+      // ignore literal parentheses characters but keep their contents
+      .replace(/[()]/g, "")
+      .trim();
 
   if (!babeByGifRef.current) {
     const m = new Map<string, BabeCard>();
+    const mNorm = new Map<string, BabeCard>();
     for (const b of KNOWN_BABES) {
       const key = (b as any).gifName as string | undefined;
-      if (key) m.set(key.trim(), b);
+      if (key) {
+        const k = key.trim();
+        m.set(k, b);
+        mNorm.set(norm(k), b);
+      }
     }
     babeByGifRef.current = m;
+    babeByGifNormRef.current = mNorm;
   }
   if (!effectByGifRef.current) {
     const m = new Map<string, EffectScript>();
+    const mNorm = new Map<string, EffectScript>();
     for (const e of KNOWN_EFFECTS) {
       const key = (e as any).gifName as string | undefined;
-      if (key) m.set(key.trim(), e);
+      if (key) {
+        const k = key.trim();
+        m.set(k, e);
+        mNorm.set(norm(k), e);
+      }
     }
     effectByGifRef.current = m;
+    effectByGifNormRef.current = mNorm;
   }
 
   const uniqueAnalysis = useMemo(() => {
@@ -87,6 +111,8 @@ export function useDeckImport(files: File[]) {
     const { uniqueNames } = uniqueAnalysis;
     const babeByGif = babeByGifRef.current!;
     const effectByGif = effectByGifRef.current!;
+    const babeByGifNorm = babeByGifNormRef.current!;
+    const effectByGifNorm = effectByGifNormRef.current!;
     const babes: BabeCard[] = [];
     const effects: EffectScript[] = [];
     const seenCardGif = new Set<string>();
@@ -94,8 +120,8 @@ export function useDeckImport(files: File[]) {
     const missing: string[] = [];
 
     for (const name of uniqueNames) {
-      const b = babeByGif.get(name);
-      const e = effectByGif.get(name);
+      const b = babeByGif.get(name) || babeByGifNorm.get(norm(name));
+      const e = effectByGif.get(name) || effectByGifNorm.get(norm(name));
       if (b) {
         const key = gifKey(b);
         if (!seenCardGif.has(key)) {

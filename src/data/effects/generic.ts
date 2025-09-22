@@ -16,10 +16,22 @@ const implemented: EffectScript[] = [
     id: uid(),
     name: "69",
     group: "GENERIC",
-    target: { kind: "many-babes", min: 3, max: 3, from: "deck" },
+    target: { kind: "many-babes", min: 1, max: 3, from: "deck" },
     description:
       "Discard up to 3 Babes whose Base Score is 6. Add 9 Score for each one. You can pay 69 Strokes and triple the Final Score.",
     gifName: "EFFECT 69.gif",
+  },
+  {
+    id: uid(),
+    name: "7 Sins Lust",
+    group: "GENERIC",
+    target: { kind: "one-babe", from: "discard" },
+    description:
+      "Pay 15 Strokes and choose 1 Babe with a Base Score of 7 from the Discard Pile; play her this turn, ignoring Babe Limit, and triple her Base Score.",
+    gifName: "EFFECT 7 Sins Lust.gif",
+    score: [
+      { scope: "babe", appliesTo: "targets", op: "mult", amount: 3 },
+    ],
   },
   {
     id: uid(),
@@ -38,7 +50,6 @@ const names = [
   "7 Sins Envy",
   "7 Sins Gluttony",
   "7 Sins Greed",
-  "7 Sins Lust",
   "7 Sins Pride",
   "7 Sins Sloth",
   "7 Sins Wrath",

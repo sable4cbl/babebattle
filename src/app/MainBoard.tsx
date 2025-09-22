@@ -242,6 +242,16 @@ export default function MainBoard({ deck, setDeck }: Props) {
       (turn as any).playBabeFromDiscardImmediate?.(chosen);
     }
 
+    // 7 Sins Lust: pay 15 strokes, pick a base-7 babe from discard, play immediately (ignores babe limit)
+    if (targetingEffect.name === "7 Sins Lust") {
+      const chosen = next[0];
+      // Add mandatory stroke cost
+      (turn as any).addStrokes?.(15);
+      (bound as any).strokeCost = ((bound as any).strokeCost || 0) + 15;
+      // Bring chosen babe from discard into play immediately (ignores babe limit)
+      (turn as any).playBabeFromDiscardImmediate?.(chosen);
+    }
+
     // Cheer Me Up: pay 15 strokes, bring BUSTY from discard into play now (counts toward babe limit)
     if (targetingEffect.name === "Cheer Me Up") {
       (turn as any).addStrokes?.(15);
@@ -458,8 +468,6 @@ function buildTargetInstruction(t: TargetDeck): string {
   }
   return "Select targets.";
 }
-
-
 
 
 

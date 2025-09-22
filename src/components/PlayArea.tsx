@@ -208,7 +208,8 @@ export default function PlayArea({
                 isDiscardTargeting = isDiscardTargeting && (selectedTargetIds?.length === 1);
               }
               const tAny: any = targeting as any;
-              const matches = !isDiscardTargeting || !tAny?.ofType || b.type === tAny.ofType;
+              const baseOk = targetingEffectName === '7 Sins Lust' ? (b.baseScore === 7) : true;
+              const matches = (!isDiscardTargeting || !tAny?.ofType || b.type === tAny.ofType) && baseOk;
               const selIdx = selectedTargetIds ? selectedTargetIds.indexOf(b.id) : -1;
               const canReplayNext = !!pendingNext?.replayBabeIds?.includes(b.id);
               const nextMult = pendingNext?.babeMultNext?.[b.id] ?? undefined;

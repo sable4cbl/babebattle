@@ -47,6 +47,10 @@ export const KNOWN_BABES: BabeCard[] = [
   { id: uid(), name: "FirstBornUnicorn", type: "BADDIE", baseScore: 8, gifName: "BADDIE FirstBornUnicorn.gif" },
 
   // BIMBO
+  { id: uid(), name: "Octokuro ", type: "BIMBO", baseScore: 12, gifName: "BIMBO Octokuro (Ahsoka).gif" },
+  { id: uid(), name: "Chessie Kay ", type: "BIMBO", baseScore: 6, gifName: "BIMBO Chessie Kay.gif" },
+  { id: uid(), name: "Valerie Kay ", type: "BIMBO", baseScore: 8, gifName: "BIMBO Valerie Kay.gif" },
+  { id: uid(), name: "Stephanie Michelle ", type: "BIMBO", baseScore: 8, gifName: "BIMBO Stephanie Michelle.gif" },
   { id: uid(), name: "Bishoujomom ", type: "BIMBO", baseScore: 8, gifName: "BIMBO Bishoujomom.gif" },
   { id: uid(), name: "Claudia Fijal", type: "BIMBO", baseScore: 8, gifName: "BIMBO Claudia Fijal.gif" },
   { id: uid(), name: "Karma Rx", type: "BIMBO", baseScore: 8, gifName: "BIMBO Karma Rx.gif" },
@@ -62,10 +66,12 @@ export const KNOWN_BABES: BabeCard[] = [
   { id: uid(), name: "Xwife Karen", type: "BIMBO", baseScore: 6, gifName: "BIMBO Xwife Karen.gif" },
 
   // BUSTY
-  { id: uid(), name: "Ava Addams", type: "BUSTY", baseScore: 6, gifName: "BUSTY Ava Addams.gif" },
+  { id: uid(), name: "Ava Addam", type: "BUSTY", baseScore: 6, gifName: "BUSTY Ava Addams.gif" },
+  { id: uid(), name: "Styxhips (Corset)", type: "BUSTY", baseScore: 12, gifName: "BUSTY StyxHips (Corset).gif" },
   { id: uid(), name: "BustyEma", type: "BUSTY", baseScore: 7, gifName: "BUSTY BustyEma.gif" },
   { id: uid(), name: "Amira K", type: "BUSTY", baseScore: 8, gifName: "BUSTY Amira K.gif" },
   { id: uid(), name: "Aisux", type: "BUSTY", baseScore: 7, gifName: "BUSTY Aisux.gif" },
+  { id: uid(), name: "Aisux GOLD", type: "BUSTY", baseScore: 8, gifName: "BUSTY Aisux Gold.gif" },
   { id: uid(), name: "Alexa Pearl", type: "BUSTY", baseScore: 8, gifName: "BUSTY Alexa Pearl.gif" },
   { id: uid(), name: "Alva Jay", type: "BUSTY", baseScore: 7, gifName: "BUSTY Alva Jay.gif" },
   { id: uid(), name: "Amber Ajami", type: "BUSTY", baseScore: 7, gifName: "BUSTY Amber Ajami.gif" },
@@ -112,6 +118,7 @@ export const KNOWN_BABES: BabeCard[] = [
   { id: uid(), name: "Vixen Virago GOLD", type: "BUSTY", baseScore: 9, gifName: "BUSTY Vixen Virago Gold.gif" },
 
   // MILF
+  { id: uid(), name: "Lauren Phillips GOLD", type: "MILF", baseScore: 9, gifName: "MILF Lauren Phillips Gold.gif" },
   { id: uid(), name: "Ava Nicks GOLD", type: "MILF", baseScore: 6, gifName: "MILF Ava Nicks Gold.gif" },
   { id: uid(), name: "Ava Nicks", type: "MILF", baseScore: 7, gifName: "MILF Ava Nicks.gif" },
   { id: uid(), name: "Cory Chase GOLD", type: "MILF", baseScore: 9, gifName: "MILF Cory Chase Gold.gif" },
@@ -130,11 +137,13 @@ export const KNOWN_BABES: BabeCard[] = [
   { id: uid(), name: "Luna Roulette", type: "MILF", baseScore: 7, gifName: "MILF Luna Roulette.gif" },
   { id: uid(), name: "Jada Sparks", type: "MILF", baseScore: 6, gifName: "MILF Jada Sparks.gif" },
   { id: uid(), name: "Bridgette B", type: "MILF", baseScore: 7, gifName: "MILF Bridgette B.gif" },
+  { id: uid(), name: "Kianna Dior", type: "MILF", baseScore: 8, gifName: "MILF Kianna Dior.gif" },
   { id: uid(), name: "Rose Monroe", type: "MILF", baseScore: 6, gifName: "MILF Rose Monroe.gif" },
   { id: uid(), name: "Savannah Bond", type: "MILF", baseScore: 8, gifName: "MILF Savannah Bond.gif" },
 
   // PAWG
   { id: uid(), name: "Violet Myers CHAMPION", type: "PAWG", baseScore: 10, gifName: "PAWG Violet Myers Champion.gif" },
+  { id: uid(), name: "Puffypink CHAMPION", type: "PAWG", baseScore: 10, gifName: "PAWG Puffypink Champion.gif" },
   { id: uid(), name: "Jolie Becker", type: "PAWG", baseScore: 8, gifName: "PAWG Jolie Becker.gif" },
   { id: uid(), name: "Allison Parker", type: "PAWG", baseScore: 6, gifName: "PAWG Allison Parker.gif" },
   { id: uid(), name: "Alexis Texas GOLD", type: "PAWG", baseScore: 9, gifName: "PAWG Alexis Texas Gold.gif" },
@@ -147,6 +156,7 @@ export const KNOWN_BABES: BabeCard[] = [
   { id: uid(), name: "Emma Magnolia", type: "PAWG", baseScore: 7, gifName: "PAWG Emma Magnolia.gif" },
   { id: uid(), name: "Imogen Lucie", type: "PAWG", baseScore: 7, gifName: "PAWG Imogen Lucie.gif" },
   { id: uid(), name: "Kelsi Monroe", type: "PAWG", baseScore: 8, gifName: "PAWG Kelsi Monroe.gif" },
+  { id: uid(), name: "Kelsi Monroe GOLD", type: "PAWG", baseScore: 9, gifName: "PAWG Kelsi Monroe Gold.gif" },
   { id: uid(), name: "Liliana Hearts", type: "PAWG", baseScore: 8, gifName: "PAWG Liliana Hearts.gif" },
   { id: uid(), name: "Jada Stevens", type: "PAWG", baseScore: 7, gifName: "PAWG Jada Stevens.gif" },
   { id: uid(), name: "Halohals", type: "PAWG", baseScore: 6, gifName: "PAWG Halohals.gif" },

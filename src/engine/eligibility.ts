@@ -16,6 +16,14 @@ export function checkEligibility(effect: BoundEffect | Omit<BoundEffect,"playId"
     }
   }
 
+  // Generic: 7 Sins Lust requires at least one discard babe with base score 7
+  if ((effect as any).name === "7 Sins Lust") {
+    const hasBase7 = state.discardPile.some(b => (b.baseScore ?? 0) === 7);
+    if (!hasBase7) {
+      return { ok: false, reason: "Requires a Base 7 Babe in discard." };
+    }
+  }
+
   if (effect.requires) {
     for (const r of effect.requires) {
       if (r.kind === "only-babe-played") {
