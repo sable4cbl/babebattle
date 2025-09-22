@@ -142,6 +142,9 @@ export type EffectScript = {
 
   onRemove?: OnRemove;
 
+  // Optional flat stroke cost charged immediately when this effect is played
+  strokeCost?: number;
+
 
 
   description?: string;
@@ -189,6 +192,9 @@ export type PendingNext = {
   addNextNextSources?: Array<{ name: string; amount: number }>;
   multNextSources?: Array<{ name: string; mult: number }>;
 
+  // Total strokes paid for effects in the previous turn
+  effectStrokesLastTurn?: number;
+
 };
 
 
@@ -229,7 +235,6 @@ export type EngineState = {
 
   // Optional history across turns: names of babes that have been played this game
   playedHistoryBabeNames?: string[];
-
 };
 
 

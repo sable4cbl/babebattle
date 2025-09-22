@@ -69,34 +69,34 @@ export default function MainBoard({ deck, setDeck }: Props) {
     [countingEffectPlays, limits.ignoreEffectLimit, limits.effects]
   );
 
-  // Helper: finalize current selection for effect "69"
-  const finalize69 = (selIds: string[]) => {
-    if (!targetingEffect || targetingEffect.name !== "69" || selIds.length === 0) return;
-    const bound = { ...(targetingEffect as any), playId: uid(), boundTargetIds: selIds } as unknown as BoundEffect;
-    // Record list move so reset/remove can revert deck<->discard transitions
-    (bound as any).listSwaps = { deckToDiscardIds: selIds.slice() };
-    // Move selected from deck to discard
-    selIds.forEach(id => (turn as any).moveDeckBabeToDiscard?.(id));
-    // Add +9 per selected
-    const addAmt = selIds.length * 9;
-    (bound as any).score = [
-      ...(((targetingEffect as any).score || []) as any[]),
-      { scope: "final", op: "add", amount: addAmt },
-    ];
-    // Optional pay to triple
-    const pay = typeof window !== 'undefined' && window.confirm("Pay 69 Strokes to triple the Final Score?");
-    if (pay) {
-      (turn as any).addStrokes?.(69);
-      (bound as any).strokeCost = ((bound as any).strokeCost || 0) + 69;
+    // Helper: finalize current selection for effect "69"
+    const finalize69 = (selIds: string[]) => {
+      if (!targetingEffect || targetingEffect.name !== "69" || selIds.length === 0) return;
+      const bound = { ...(targetingEffect as any), playId: uid(), boundTargetIds: selIds } as unknown as BoundEffect;
+      // Record list move so reset/remove can revert deck<->discard transitions
+      (bound as any).listSwaps = { deckToDiscardIds: selIds.slice() };
+      // Move selected from deck to discard
+      selIds.forEach(id => (turn as any).moveDeckBabeToDiscard?.(id));
+      // Add +9 per selected
+      const addAmt = selIds.length * 9;
       (bound as any).score = [
-        ...((bound as any).score || []),
-        { scope: "final", op: "mult", amount: 3 },
+        ...(((targetingEffect as any).score || []) as any[]),
+        { scope: "final", op: "add", amount: addAmt },
       ];
-    }
-    (turn as any).playBoundEffect(bound);
-    setTargetingEffect(null);
-    setSelectedTargets([]);
-  };
+      // Optional pay to triple
+      const pay = typeof window !== 'undefined' && window.confirm("Pay 69 Strokes to triple the Final Score?");
+      if (pay) {
+        // Charge via generic strokeCost flow in playBoundEffect (avoid double-charging)
+        (bound as any).strokeCost = ((bound as any).strokeCost || 0) + 69;
+        (bound as any).score = [
+          ...((bound as any).score || []),
+          { scope: "final", op: "mult", amount: 3 },
+        ];
+      }
+      (turn as any).playBoundEffect(bound);
+      setTargetingEffect(null);
+      setSelectedTargets([]);
+    };
 
   // Keep your previous mapping for PlayArea visual keys
   const playedBabesForPlayArea = useMemo(
@@ -132,12 +132,17 @@ export default function MainBoard({ deck, setDeck }: Props) {
             if (targetingEffect) {
               const allowBabeSwapDeckPick = targetingEffect.name === "Babe Swap" && selectedTargets.length === 0;
               const allow69Pick = targetingEffect.name === "69" && selectedTargets.length < 3 && (x as BabeCard).baseScore === 6;
+              const allowBlowjobBribePick = targetingEffect.name === "Blowjob Bribe" && selectedTargets.length === 0;
               // If the current card is a valid target for the active effect, enable it regardless of play limits
-              if (allowBabeSwapDeckPick || allow69Pick) return { disabled: false };
+              if (allowBabeSwapDeckPick || allow69Pick || allowBlowjobBribePick) return { disabled: false };
               return { disabled: true, reason: "Selecting target" };
             }
             // Check base babe limit first; allow extra type-scoped slots when at cap
             const b = x as BabeCard;
+            // If Cucked is in play, no babes may be played
+            if ((turn.playedEffects as any[])?.some?.(pe => (pe as any).name === 'Cucked')) {
+              return { disabled: true, reason: "Cucked: no other cards this turn" };
+            }
             const wouldBeCount = countingBabePlays + 1;
             if (wouldBeCount > limits.babes) {
               const extraMap = (limits as any).extraBabesByType as Record<string, number> | undefined;
@@ -173,6 +178,17 @@ export default function MainBoard({ deck, setDeck }: Props) {
                 if (nextSel.length >= 3) {
                   finalize69(nextSel);
                 }
+                return;
+              }
+              if (targetingEffect.name === "Blowjob Bribe") {
+                const nextSel = [b.id];
+                setSelectedTargets(nextSel);
+                const bound = { ...(targetingEffect as any), playId: uid(), boundTargetIds: nextSel } as unknown as BoundEffect;
+                (bound as any).listSwaps = { deckToDiscardIds: nextSel };
+                (turn as any).moveDeckBabeToDiscard?.(b.id);
+                (turn as any).playBoundEffect(bound);
+                setTargetingEffect(null);
+                setSelectedTargets([]);
                 return;
               }
               return;
@@ -242,21 +258,16 @@ export default function MainBoard({ deck, setDeck }: Props) {
       (turn as any).playBabeFromDiscardImmediate?.(chosen);
     }
 
-    // 7 Sins Lust: pay 15 strokes, pick a base-7 babe from discard, play immediately (ignores babe limit)
+    // 7 Sins Lust: pick a base-7 babe from discard, play immediately (ignores babe limit)
     if (targetingEffect.name === "7 Sins Lust") {
       const chosen = next[0];
-      // Add mandatory stroke cost
-      (turn as any).addStrokes?.(15);
-      (bound as any).strokeCost = ((bound as any).strokeCost || 0) + 15;
       // Bring chosen babe from discard into play immediately (ignores babe limit)
       (turn as any).playBabeFromDiscardImmediate?.(chosen);
     }
 
-    // Cheer Me Up: pay 15 strokes, bring BUSTY from discard into play now (counts toward babe limit)
+    // Cheer Me Up: bring BUSTY from discard into play now (counts toward babe limit); cost handled generically
     if (targetingEffect.name === "Cheer Me Up") {
-      (turn as any).addStrokes?.(15);
       const chosen = next[0];
-      (bound as any).strokeCost = 15;
       (turn as any).playBabeFromDiscardCounted?.(chosen);
     }
 
@@ -287,8 +298,8 @@ export default function MainBoard({ deck, setDeck }: Props) {
       };
     }
 
-    // Sun Dress: triple target's base (handled by score op) and pay new base in strokes now
-    if (targetingEffect.name === "Sun Dress") {
+    // Sun Dress / Suck And Stroke: multiply target's base (handled by score op) and pay new base in strokes now
+    if (targetingEffect.name === "Sun Dress" || targetingEffect.name === "Suck And Stroke") {
       const chosen = next[0];
       (bound as any).dynamicStrokeTargetId = chosen;
       (bound as any).dynamicStrokeKind = 'per-babe-total';
@@ -348,33 +359,67 @@ export default function MainBoard({ deck, setDeck }: Props) {
           sortDir={effectSortDir}
           setSortDir={setEffectSortDir}
           getDisabled={(e) => {
-            const elig = checkEligibility({ ...(e as any), playId: "tmp" }, {
+            const stateForElig: any = {
               playedBabes: turn.playedBabes,
               playedEffects: (turn.playedEffects as unknown as BoundEffect[]) || [],
               discardPile: (turn.discard?.babes as BabeCard[]) || [],
               pendingNext: turn.pendingNext,
               playedHistoryBabeNames: (turn as any).playedHistoryBabeNames,
-            });
+              cuckedPlayedThisGame: (turn as any).cuckedPlayedThisGame,
+            };
+            const elig = checkEligibility({ ...(e as any), playId: "tmp" }, stateForElig as any);
             const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes';
+            // If Cucked is in play, disallow all other effects
+            if ((turn.playedEffects as any[])?.some?.(pe => (pe as any).name === 'Cucked') && (e as any).name !== 'Cucked') {
+              return { disabled: true, reason: "Cucked: no other cards this turn" };
+            }
             if (!canPlayEffect && !ignoreLimitForThisCard) return { disabled: true, reason: "Effect limit reached" };
             if (!elig.ok) return { disabled: true, reason: elig.reason };
             return { disabled: false };
           }}
           onAddBabe={undefined}
           onAddEffect={(e) => {
-            const elig = checkEligibility({ ...(e as any), playId: "tmp" }, {
+            const stateForElig: any = {
               playedBabes: turn.playedBabes,
               playedEffects: (turn.playedEffects as unknown as BoundEffect[]) || [],
               discardPile: (turn.discard?.babes as BabeCard[]) || [],
               pendingNext: turn.pendingNext,
               playedHistoryBabeNames: (turn as any).playedHistoryBabeNames,
-            });
+              cuckedPlayedThisGame: (turn as any).cuckedPlayedThisGame,
+            };
+            const elig = checkEligibility({ ...(e as any), playId: "tmp" }, stateForElig as any);
             const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes';
             if ((!canPlayEffect && !ignoreLimitForThisCard) || !elig.ok) return;
             if (e.target.kind === "none") {
               if (e.name === "Wilde Card") {
                 setChoiceEffect(e);
                 return;
+              }
+              if (e.name === 'Cucked') {
+                // Play and mark once-per-game flag; cost is applied generically via strokeCost in catalog
+                turn.playEffect(e);
+                (turn as any).setCuckedPlayedThisGame?.(true);
+                return;
+              }
+              if (e.name === 'Executive Orders') {
+                const current = (turn as any).effectSurchargePerPlay || 0;
+                const delta = Math.max(0, 20 - current);
+                const bound = { ...(e as any), playId: uid() } as BoundEffect;
+                (bound as any).effectSurchargeDelta = delta;
+                (turn as any).playBoundEffect(bound);
+                if (delta > 0) (turn as any).addEffectSurcharge?.(delta);
+                return;
+              }
+              if (e.name === 'Pillow Humping') {
+                // Let the hook compute dynamic stroke cost as 30 per card played this turn (including itself)
+                const bound = { ...(e as any), playId: uid() } as BoundEffect;
+                (bound as any).dynamicStrokeKind = 'per-turn-cards';
+                (turn as any).playBoundEffect(bound);
+                return;
+              }
+              if (e.name === 'Porn Addict' || e.name === 'Jerk It Now!') {
+                // Costs are applied generically from catalog strokeCost
+                return turn.playEffect(e);
               }
               return turn.playEffect(e);
             }
@@ -468,7 +513,3 @@ function buildTargetInstruction(t: TargetDeck): string {
   }
   return "Select targets.";
 }
-
-
-
-

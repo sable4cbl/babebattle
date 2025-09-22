@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BabeCard } from "../types/cards";
 import type { EffectScript, BoundEffect } from "../types/effects";
 import { uid } from "../utils/uid";
@@ -35,6 +35,7 @@ export function useTurn(cfg?: TurnApiConfig) {
   const [strokesThisTurn, setStrokesThisTurn] = useState(0);
   const computedLimits = DEFAULT_LIMITS;
   const [pendingNext, setPendingNext] = useState<PendingNext | undefined>(undefined);
+  const [cuckedPlayedThisGame, setCuckedPlayedThisGame] = useState(false);
   // Track names of babes that have been played at least once this game
   const [playedHistoryBabeNames, setPlayedHistoryBabeNames] = useState<string[]>([]);
 
@@ -46,6 +47,7 @@ export function useTurn(cfg?: TurnApiConfig) {
     () => playedBabes.reduce((s, b) => s + (b.baseScore || 0), 0),
     [playedBabes]
   );
+
 
   // --- Deck helpers ---
   const deckRemoveBabe = useCallback(
@@ -129,9 +131,20 @@ export function useTurn(cfg?: TurnApiConfig) {
     [deckAddBabe, playedEffects]
   );
 
+  const [effectSurchargePerPlay, setEffectSurchargePerPlay] = useState(0);
+
   const playEffect = useCallback(
     (e: EffectScript) => {
       const bound: BoundEffect = { ...e, playId: uid() };
+      // Apply any flat stroke cost defined on the card (no immediate total update; recomputed below)
+      const baseCost = (e as any).strokeCost as number | undefined;
+      if (typeof baseCost === 'number' && baseCost > 0) {
+        (bound as any).strokeCost = ((bound as any).strokeCost || 0) + baseCost;
+      }
+      if (effectSurchargePerPlay > 0 && (e as any).name !== 'Executive Orders') {
+        (bound as any).strokeCost = ((bound as any).strokeCost || 0) + effectSurchargePerPlay;
+        (bound as any).surchargeApplied = ((bound as any).surchargeApplied || 0) + effectSurchargePerPlay;
+      }
       // Capture pristine script from deck (before removal) for later restoration
       try {
         const deckList = cfg?.getDeckEffects?.() || [];
@@ -141,11 +154,17 @@ export function useTurn(cfg?: TurnApiConfig) {
       setPlayedEffects(prev => [...prev, bound]);
       deckRemoveEffect(e.id); // hide from deck immediately
     },
-    [deckRemoveEffect]
+    [deckRemoveEffect, effectSurchargePerPlay]
   );
 
   const playBoundEffect = useCallback(
     (e: BoundEffect) => {
+      // Apply base stroke cost if present on the effect script (total recomputed via effect below)
+      const baseCost = (e as any).strokeCost as number | undefined;
+      if (effectSurchargePerPlay > 0 && (e as any).name !== 'Executive Orders') {
+        (e as any).strokeCost = ((e as any).strokeCost || 0) + effectSurchargePerPlay;
+        (e as any).surchargeApplied = ((e as any).surchargeApplied || 0) + effectSurchargePerPlay;
+      }
       // Capture pristine script from deck (before removal) for later restoration
       try {
         const deckList = cfg?.getDeckEffects?.() || [];
@@ -155,7 +174,7 @@ export function useTurn(cfg?: TurnApiConfig) {
       setPlayedEffects(prev => [...prev, e]);
       deckRemoveEffect(e.id);
     },
-    [deckRemoveEffect]
+    [deckRemoveEffect, effectSurchargePerPlay]
   );
 
   const removePlayedEffect = useCallback(
@@ -301,6 +320,11 @@ export function useTurn(cfg?: TurnApiConfig) {
           }
         } catch {}
 
+        // If removing an effect that contributed a future surcharge (Executive Orders), revert its delta
+        try {
+          const delta = (eff as any).effectSurchargeDelta as number | undefined;
+          if (typeof delta === 'number' && delta > 0) setEffectSurchargePerPlay(v => Math.max(0, v - delta));
+        } catch {}
         // After removals and dynamic recompute, set strokes to the sum of remaining stroke costs
         const totalCharges = next.reduce((sum, e: any) => sum + (typeof e?.strokeCost === 'number' ? e.strokeCost : 0), 0);
         setStrokesThisTurn(_ => totalCharges);
@@ -316,6 +340,11 @@ export function useTurn(cfg?: TurnApiConfig) {
   // --- Turn lifecycle ---
   const resetTurn = useCallback(() => {
     // Revert any list moves caused by effects (e.g., Handbra discard->deck, Babe Swap deck<->discard)
+    // If Executive Orders was played this turn, revert surcharge since the turn is canceled
+    try {
+      const toSub = (playedEffects as any[])?.reduce?.((s, pe) => s + ((((pe as any).effectSurchargeDelta as number) || 0)), 0) || 0;
+      if (toSub > 0) setEffectSurchargePerPlay(v => Math.max(0, v - toSub));
+    } catch {}
     setPlayedEffects(prev => {
       // Undo boundDiscards: move ids from Deck back to Discard
       const boundIds: string[] = [];
@@ -520,11 +549,36 @@ export function useTurn(cfg?: TurnApiConfig) {
     });
   }, []);
 
+  // Ensure dynamic stroke costs and total strokes are always consistent
+  useEffect(() => {
+    // Recompute dynamic stroke costs (currently for Pillow Humping) and total strokes consistently
+    let changed = false;
+    const totalCards = playedBabes.length + playedEffects.length;
+    const nextEffects = playedEffects.map((pe: any) => {
+      if (pe?.dynamicStrokeKind === 'per-turn-cards' || pe?.name === 'Pillow Humping') {
+        const baseDesired = 30 * totalCards;
+        const surcharge = (pe?.surchargeApplied as number) || 0;
+        const desired = baseDesired + surcharge;
+        const current = typeof pe.strokeCost === 'number' ? pe.strokeCost : 0;
+        if (current !== desired) {
+          changed = true;
+          return { ...pe, strokeCost: desired } as BoundEffect;
+        }
+      }
+      return pe;
+    });
+    const list = (changed ? nextEffects : playedEffects) as any[];
+    if (changed) setPlayedEffects(list as BoundEffect[]);
+    const totalCharges = list.reduce((sum, e: any) => sum + (typeof e?.strokeCost === 'number' ? e.strokeCost : 0), 0);
+    setStrokesThisTurn(totalCharges);
+  }, [playedBabes, playedEffects]);
+
   return {
     // state
     turnNumber,
     strokesThisTurn,
     pendingNext,
+    cuckedPlayedThisGame,
     playedBabes,
     playedEffects,
     discard, // { babes: BabeCard[]; effects: EffectScript[] }
@@ -554,5 +608,8 @@ export function useTurn(cfg?: TurnApiConfig) {
     playBabeFromDiscardImmediate,
     playBabeFromDiscardCounted,
     addStrokes,
+    effectSurchargePerPlay,
+    addEffectSurcharge: (n: number) => setEffectSurchargePerPlay(v => Math.max(0, v + n)),
+    setCuckedPlayedThisGame,
   };
 }

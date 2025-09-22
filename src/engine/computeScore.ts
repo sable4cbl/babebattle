@@ -39,6 +39,19 @@ export function computeScore(state: EngineState): EngineResult {
     if (!e.score || e.score.length === 0) continue;
 
     for (const op of e.score) {
+      // Special case: Blooming Blossom — if Blake Blossom was played this turn, triple her
+      if (
+        e.name === "Blooming Blossom" &&
+        (op as any)?.scope === "babe" && (op as any)?.op === "mult"
+      ) {
+        const blakes = score.perBabe.filter(b => (b.name || "").toUpperCase().startsWith("BLAKE BLOSSOM"));
+        if (blakes.length > 0) {
+          for (const t of blakes) t.mult *= 3;
+          log.push(`${e.name}: ×3 → ${blakes.map(t=>t.name).join(", ")}`);
+          final = score.perBabe.reduce((a,x)=>a+x.total,0);
+        }
+        continue;
+      }
       // Special case: Late Bloomer conditional triple (only if Emily Bloom is the only babe played)
       if (
         e.name === "Late Bloomer" &&
@@ -200,6 +213,7 @@ function collectNextPending(
   const addNextSources: Array<{ name: string; amount: number }> = [];
   const addNextNextSources: Array<{ name: string; amount: number }> = [];
   const multNextSources: Array<{ name: string; mult: number }> = [];
+  let effectStrokesLastTurn = 0;
   for (const e of effects) {
     const f = e.future; if (!f) continue;
     if (typeof f.nextAdd === "number") { add += f.nextAdd; addNextSources.push({ name: e.name, amount: f.nextAdd }); log.push(`${e.name}: next +${f.nextAdd}`); }
@@ -239,9 +253,14 @@ function collectNextPending(
       log.push(`${e.name}: +${f.addNextNext} in 2 turns`);
     }
   }
+  // Sum strokes paid for effects this turn
+  try {
+    effectStrokesLastTurn = effects.reduce((s, e: any) => s + (typeof e?.strokeCost === 'number' ? e.strokeCost : 0), 0);
+  } catch {}
   const payload: PendingNext = {};
   if (add !== 0) payload.addNext = add;
   if (mult !== 1) payload.multNext = mult;
+  if (effectStrokesLastTurn > 0) (payload as any).effectStrokesLastTurn = effectStrokesLastTurn;
   if (replay.length) payload.replayBabeIds = Array.from(new Set(replay));
   if (ignoreLimit) payload.ignoreBabeLimitNext = true;
   if (Object.keys(babeMultNext).length) payload.babeMultNext = babeMultNext;
@@ -251,8 +270,6 @@ function collectNextPending(
   if (multNextSources.length) (payload as any).multNextSources = multNextSources;
   return Object.keys(payload).length ? payload : undefined;
 }
-
-
 
 
 

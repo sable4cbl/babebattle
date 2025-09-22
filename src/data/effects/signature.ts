@@ -44,6 +44,17 @@ export const SIGNATURE_IMPLEMENTED: EffectScript[] = [
   },
   {
     id: uid(),
+    name: "Blooming Blossom",
+    group: "SIGNATURE",
+    target: { kind: "none" },
+    // Score handled via special-case in engine: triples Blake Blossom if played
+    score: [{ scope: "babe", appliesTo: "targets", op: "mult", amount: 3 } as any],
+    gifName: "EFFECT BLAKE BLOSSOM Blooming Blossom.gif",
+    description:
+      "If you played Blake Blossom this turn, triple her Base Score.",
+  },
+  {
+    id: uid(),
     name: "Delish-Ious",
     group: "SIGNATURE",
     target: { kind: "none" },

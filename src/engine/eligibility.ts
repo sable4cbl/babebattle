@@ -24,6 +24,33 @@ export function checkEligibility(effect: BoundEffect | Omit<BoundEffect,"playId"
     }
   }
 
+  // Generic: Cucked — once per game, and must be the only card this turn
+  if ((effect as any).name === "Cucked") {
+    if ((state as any).cuckedPlayedThisGame) {
+      return { ok: false, reason: "You already played Cucked this game." };
+    }
+    if (state.playedBabes.length > 0 || state.playedEffects.length > 0) {
+      return { ok: false, reason: "Cucked must be the only card this turn." };
+    }
+  }
+
+  // Generic: Stress Relief — only playable if last turn effect strokes >= 30
+  if ((effect as any).name === "Stress Relief") {
+    const last = state.pendingNext as any;
+    const paid = typeof last?.effectStrokesLastTurn === 'number' ? last.effectStrokesLastTurn : 0;
+    if (paid < 30) {
+      return { ok: false, reason: "Requires paying ≥30 Strokes on effects last turn." };
+    }
+  }
+
+  // Signature: Blooming Blossom — only useful if Blake Blossom was played this turn; gate eligibility accordingly
+  if ((effect as any).name === "Blooming Blossom") {
+    const hasBlake = state.playedBabes.some(b => (b.name || "").toUpperCase().startsWith("BLAKE BLOSSOM"));
+    if (!hasBlake) {
+      return { ok: false, reason: "Requires Blake Blossom played this turn." };
+    }
+  }
+
   if (effect.requires) {
     for (const r of effect.requires) {
       if (r.kind === "only-babe-played") {

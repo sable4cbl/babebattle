@@ -22,6 +22,7 @@ const implemented: EffectScript[] = [
     onRemove: { undoDiscardedTargets: true },
     description: "Pay 15 Strokes. Choose 1 BUSTY Babe from your Discard Pile; play her this turn and double her Base Score.",
     gifName: "EFFECT BUSTY Cheer Me Up.gif",
+    strokeCost: 15,
   },
   { // Only BUSTY can be played; triple all BUSTY
     id: uid(),
