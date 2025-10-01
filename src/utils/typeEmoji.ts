@@ -3,15 +3,23 @@ import type { BabeType } from "../types/cards"; // ✅ from cards
 // so we don’t need a dedicated type, just accept string | undefined
 
 const EMOJI: Record<string, string> = {
-  // Babe types
+  // IRL
   BADDIE: "😈",
   BIMBO: "💄",
   BUSTY: "🍒",
   MILF: "🍷",
   PAWG: "🍑",
+
+  // TRANS
   TRANS: "🍆",
 
-  // Effect groups
+  // HENTAI
+  ANIME: "🌸",
+  COMICS: "💥",
+  GAME: "🎮",
+  WESTERN: "🎬",
+
+  // EFFECTS
   SIGNATURE: "⭐",
   GENERIC: "✨",
 };

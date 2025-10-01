@@ -1,0 +1,36 @@
+import type { BabeCard } from "../../types/cards";
+import { uid } from "../../utils/uid";
+
+export const WESTERN_BABES: BabeCard[] = [
+  { id: uid(), name: "Aayla Secura", type: "WESTERN", baseScore: 6, gifName: "WESTERN Aayla Secura.gif" },
+  { id: uid(), name: "Ann Possible", type: "WESTERN", baseScore: 7, gifName: "WESTERN Ann Possible.gif" },
+  { id: uid(), name: "Anna", type: "WESTERN", baseScore: 7, gifName: "WESTERN Anna.gif" },
+  { id: uid(), name: "Cass Hamada", type: "WESTERN", baseScore: 7, gifName: "WESTERN Cass Hamada.gif" },
+  { id: uid(), name: "Charlie Morningstar", type: "WESTERN", baseScore: 8, gifName: "WESTERN Charlie Morningstar.gif" },
+  { id: uid(), name: "Charlotte La Bouff", type: "WESTERN", baseScore: 6, gifName: "WESTERN Charlotte La Bouff.gif" },
+  { id: uid(), name: "Chel", type: "WESTERN", baseScore: 6, gifName: "WESTERN Chel.gif" },
+  { id: uid(), name: "Darth Talon", type: "WESTERN", baseScore: 7, gifName: "WESTERN Darth Talon.gif" },
+  { id: uid(), name: "Eda Clawthorne", type: "WESTERN", baseScore: 7, gifName: "WESTERN Eda Clawthorne.gif" },
+  { id: uid(), name: "Elsa", type: "WESTERN", baseScore: 8, gifName: "WESTERN Elsa.gif" },
+  { id: uid(), name: "Emily", type: "WESTERN", baseScore: 7, gifName: "WESTERN Emily.gif" },
+  { id: uid(), name: "Flame Princess", type: "WESTERN", baseScore: 6, gifName: "WESTERN Flame Princess.gif" },
+  { id: uid(), name: "Gogo Tomago", type: "WESTERN", baseScore: 6, gifName: "WESTERN Gogo Tomago.gif" },
+  { id: uid(), name: "Helen Parr", type: "WESTERN", baseScore: 8, gifName: "WESTERN Helen Parr.gif" },
+  { id: uid(), name: "Honey Lemon", type: "WESTERN", baseScore: 7, gifName: "WESTERN Honey Lemon.gif" },
+  { id: uid(), name: "Jessica Rabbit", type: "WESTERN", baseScore: 8, gifName: "WESTERN Jessica Rabbit.gif" },
+  { id: uid(), name: "Katie Killjoy", type: "WESTERN", baseScore: 6, gifName: "WESTERN Katie Killjoy.gif" },
+  { id: uid(), name: "Kida", type: "WESTERN", baseScore: 6, gifName: "WESTERN Kida.gif" },
+  { id: uid(), name: "Korra", type: "WESTERN", baseScore: 8, gifName: "WESTERN Korra.gif" },
+  { id: uid(), name: "Lifeguard", type: "WESTERN", baseScore: 6, gifName: "WESTERN Lifeguard.gif" },
+  { id: uid(), name: "Marceline", type: "WESTERN", baseScore: 7, gifName: "WESTERN Marceline.gif" },
+  { id: uid(), name: "Millie", type: "WESTERN", baseScore: 7, gifName: "WESTERN Millie.gif" },
+  { id: uid(), name: "Miss Heed", type: "WESTERN", baseScore: 7, gifName: "WESTERN Miss Heed.gif" },
+  { id: uid(), name: "Nani Pelekai", type: "WESTERN", baseScore: 7, gifName: "WESTERN Nani Pelekai.gif" },
+  { id: uid(), name: "Princess Bubblegum", type: "WESTERN", baseScore: 8, gifName: "WESTERN Princess Bubblegum.gif" },
+  { id: uid(), name: "Rapunzel", type: "WESTERN", baseScore: 8, gifName: "WESTERN Rapunzel.gif" },
+  { id: uid(), name: "Sara Bellum", type: "WESTERN", baseScore: 8, gifName: "WESTERN Sara Bellum.gif" },
+  { id: uid(), name: "Sera", type: "WESTERN", baseScore: 6, gifName: "WESTERN Sera.gif" },
+  { id: uid(), name: "Shego", type: "WESTERN", baseScore: 8, gifName: "WESTERN Shego.gif" },
+  { id: uid(), name: "Verosika Mayday", type: "WESTERN", baseScore: 7, gifName: "WESTERN Verosika Mayday.gif" },
+];
+

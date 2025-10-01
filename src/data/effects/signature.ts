@@ -4,7 +4,6 @@ import { uid } from "../../utils/uid";
 
 const pairs = [
   ["ANGELA WHITE SAVANNAH BOND", "Aussie Awesomeness"],
-  ["BLAKE BLOSSOM", "Blooming Blossom"],
   ["BONNIE BLUE", "Blue Balls"],
   ["SAVANNAH BOND", "Bond For Life"],
   ["BROOKLYN CHASE", "Chase The Sun"],
@@ -41,6 +40,29 @@ export const SIGNATURE_IMPLEMENTED: EffectScript[] = [
     gifName: "EFFECT EMILY BLOOM Late Bloomer.gif",
     description:
       "If Emily Bloom is the only Babe you played this turn, triple her Base Score. Add 30 Score next turn, and add 60 score the turn after that.",
+  },
+  {
+    id: uid(),
+    name: "Tangled Up Inside",
+    group: "SIGNATURE",
+    target: { kind: "none" },
+    // Triples Final Score; eligibility ensures Rapunzel was played this turn
+    score: [{ scope: "final", op: "mult", amount: 3 }],
+    gifName: "EFFECT HENTAI RAPUNZEL Tangled Up Inside.gif",
+    description:
+      "If you played Rapunzel this turn, triple the Final Score.",
+  },
+  {
+    id: uid(),
+    name: "Full Interface",
+    group: "SIGNATURE",
+    target: { kind: "none" },
+    // Score handled via special-case in engine: doubles Cortana if played this turn
+    score: [{ scope: "babe", appliesTo: "targets", op: "mult", amount: 2 } as any],
+    future: { doublePlayEffectNext: true },
+    gifName: "EFFECT HENTAI CORTANA Full Interface.gif",
+    description:
+      "If you played Cortana this turn, double her Base Score. Next turn, you can play 1 Effect Card twice, ignoring Effect Card Limit.",
   },
   {
     id: uid(),

@@ -36,6 +36,8 @@ export function useTurn(cfg?: TurnApiConfig) {
   const computedLimits = DEFAULT_LIMITS;
   const [pendingNext, setPendingNext] = useState<PendingNext | undefined>(undefined);
   const [cuckedPlayedThisGame, setCuckedPlayedThisGame] = useState(false);
+  const [doublePlayConsumedThisTurn, setDoublePlayConsumedThisTurn] = useState(false);
+  const [cartoonLogicPlayedThisGame, setCartoonLogicPlayedThisGame] = useState(false);
   // Track names of babes that have been played at least once this game
   const [playedHistoryBabeNames, setPlayedHistoryBabeNames] = useState<string[]>([]);
 
@@ -141,40 +143,89 @@ export function useTurn(cfg?: TurnApiConfig) {
       if (typeof baseCost === 'number' && baseCost > 0) {
         (bound as any).strokeCost = ((bound as any).strokeCost || 0) + baseCost;
       }
-      if (effectSurchargePerPlay > 0 && (e as any).name !== 'Executive Orders') {
-        (bound as any).strokeCost = ((bound as any).strokeCost || 0) + effectSurchargePerPlay;
-        (bound as any).surchargeApplied = ((bound as any).surchargeApplied || 0) + effectSurchargePerPlay;
-      }
+      // Do NOT mutate strokeCost with Executive Orders surcharge here; it is applied centrally in recompute
       // Capture pristine script from deck (before removal) for later restoration
       try {
         const deckList = cfg?.getDeckEffects?.() || [];
         const orig = deckList.find(x => x.id === e.id);
         if (orig) setEffectOriginalById(map => (map[e.id] ? map : { ...map, [e.id]: orig }));
       } catch {}
-      setPlayedEffects(prev => [...prev, bound]);
+      if ((e as any).name === 'Cartoon Logic') {
+        setCartoonLogicPlayedThisGame(true);
+      }
+      if (pendingNext?.doublePlayEffectNext) {
+        // Special handling: effect "69" should run twice with separate targeting, not auto-duplicate
+        if ((e as any).name === '69') {
+          setPlayedEffects(prev => [...prev, bound]);
+          // Consume the flag so it doesn't auto-duplicate other effects; UI will re-target for the second run
+          setPendingNext(p => {
+            if (!p?.doublePlayEffectNext) return p;
+            const { doublePlayEffectNext, ...rest } = p as any;
+            return Object.keys(rest).length ? (rest as any) : undefined;
+          });
+          setDoublePlayConsumedThisTurn(true);
+        } else {
+          const dup: BoundEffect = { ...(bound as any), playId: uid(), freeEffect: true } as BoundEffect;
+          (dup as any).duplicateOfPlayId = bound.playId;
+          (bound as any).linkedDuplicatePlayId = dup.playId;
+          setPlayedEffects(prev => [...prev, bound, dup]);
+          setPendingNext(p => {
+            if (!p?.doublePlayEffectNext) return p;
+            const { doublePlayEffectNext, ...rest } = p as any;
+            return Object.keys(rest).length ? (rest as any) : undefined;
+          });
+          setDoublePlayConsumedThisTurn(true);
+        }
+      } else {
+        setPlayedEffects(prev => [...prev, bound]);
+      }
       deckRemoveEffect(e.id); // hide from deck immediately
     },
-    [deckRemoveEffect, effectSurchargePerPlay]
+    [deckRemoveEffect, effectSurchargePerPlay, pendingNext]
   );
 
   const playBoundEffect = useCallback(
     (e: BoundEffect) => {
       // Apply base stroke cost if present on the effect script (total recomputed via effect below)
       const baseCost = (e as any).strokeCost as number | undefined;
-      if (effectSurchargePerPlay > 0 && (e as any).name !== 'Executive Orders') {
-        (e as any).strokeCost = ((e as any).strokeCost || 0) + effectSurchargePerPlay;
-        (e as any).surchargeApplied = ((e as any).surchargeApplied || 0) + effectSurchargePerPlay;
-      }
+      // Do NOT mutate strokeCost with Executive Orders surcharge here; it is applied centrally in recompute
       // Capture pristine script from deck (before removal) for later restoration
       try {
         const deckList = cfg?.getDeckEffects?.() || [];
         const orig = deckList.find(x => x.id === e.id);
         if (orig) setEffectOriginalById(map => (map[e.id] ? map : { ...map, [e.id]: orig as EffectScript }));
       } catch {}
-      setPlayedEffects(prev => [...prev, e]);
+      if ((e as any).name === 'Cartoon Logic') {
+        setCartoonLogicPlayedThisGame(true);
+      }
+      if (pendingNext?.doublePlayEffectNext) {
+        if ((e as any).name === '69') {
+          // Do not auto-duplicate; let UI re-target a second time; consume the flag now
+          setPlayedEffects(prev => [...prev, e]);
+          setPendingNext(p => {
+            if (!p?.doublePlayEffectNext) return p;
+            const { doublePlayEffectNext, ...rest } = p as any;
+            return Object.keys(rest).length ? (rest as any) : undefined;
+          });
+          setDoublePlayConsumedThisTurn(true);
+        } else {
+          const dup: BoundEffect = { ...(e as any), playId: uid(), freeEffect: true } as BoundEffect;
+          (dup as any).duplicateOfPlayId = e.playId;
+          (e as any).linkedDuplicatePlayId = dup.playId;
+          setPlayedEffects(prev => [...prev, e, dup]);
+          setPendingNext(p => {
+            if (!p?.doublePlayEffectNext) return p;
+            const { doublePlayEffectNext, ...rest } = p as any;
+            return Object.keys(rest).length ? (rest as any) : undefined;
+          });
+          setDoublePlayConsumedThisTurn(true);
+        }
+      } else {
+        setPlayedEffects(prev => [...prev, e]);
+      }
       deckRemoveEffect(e.id);
     },
-    [deckRemoveEffect, effectSurchargePerPlay]
+    [deckRemoveEffect, effectSurchargePerPlay, pendingNext]
   );
 
   const removePlayedEffect = useCallback(
@@ -184,115 +235,102 @@ export function useTurn(cfg?: TurnApiConfig) {
         if (ix === -1) return prev;
         const eff = prev[ix];
 
-        // Prevent removal if doing so would break current babe limit (e.g., removing type-scoped extra slots)
-        try {
-          const remaining = prev.filter((_, i) => i !== ix);
-          const limits = computeLimits(remaining);
-          const n = playedBabes.length;
-          let overflow = Math.max(0, n - limits.babes);
-          if (overflow > 0) {
-            // Count per-type and sum capacity from extraBabesByType, capped by count of that type
-            const counts: Record<string, number> = {};
-            for (const b of playedBabes) counts[b.type] = (counts[b.type] || 0) + 1;
-            let cap = 0;
-            const extraMap = (limits as any).extraBabesByType as Record<string, number> | undefined;
-            if (extraMap) {
-              for (const [t, extra] of Object.entries(extraMap)) {
-                cap += Math.min(extra, counts[t] || 0);
+        // Disallow removing the duplicated copy alone
+        if ((eff as any).duplicateOfPlayId) {
+          return prev;
+        }
+
+        // If this effect has a linked duplicate, remove both together
+        const originalPlayId = eff.playId;
+        const groupIds = new Set<string>([originalPlayId]);
+        prev.forEach(pe => { if ((pe as any)?.duplicateOfPlayId === originalPlayId) groupIds.add(pe.playId); });
+
+        // Helper to revert a single effect's side-effects and restore to deck
+        const revertOne = (effToRevert: BoundEffect) => {
+          // If effect requests undoing discarded targets, move targeted babes back to discard
+          if (effToRevert.onRemove?.undoDiscardedTargets && effToRevert.boundTargetIds?.length) {
+            const ids = new Set(effToRevert.boundTargetIds);
+            setPlayedBabes(pbs => {
+              const stay: BabeCard[] = [];
+              const moved: BabeCard[] = [];
+              for (const b of pbs) { if (ids.has(b.id)) moved.push(b); else stay.push(b); }
+              if (moved.length) {
+                setDiscard(d => {
+                  const existing = new Set(d.babes.map(x => x.id));
+                  const add = moved.filter(b => !existing.has(b.id));
+                  return { ...d, babes: [...d.babes, ...add] };
+                });
               }
-            }
-            if (overflow > cap) {
-              return prev; // disallow removal
-            }
+              return stay;
+            });
           }
-        } catch {}
-        // If effect requests undoing discarded targets, move targeted babes back to discard
-        if (eff.onRemove?.undoDiscardedTargets && eff.boundTargetIds?.length) {
-          const ids = new Set(eff.boundTargetIds);
-          setPlayedBabes(pbs => {
-            const stay: BabeCard[] = [];
-            const moved: BabeCard[] = [];
-            for (const b of pbs) {
-              if (ids.has(b.id)) moved.push(b); else stay.push(b);
-            }
+          // If effect moved targets from discard to deck, move them back to discard
+          if (effToRevert.onRemove?.undoDiscardedTargets && (effToRevert as any).boundDiscards?.babeIds?.length) {
+            const ids = new Set(((effToRevert as any).boundDiscards.babeIds as string[]) || []);
+            const deckNow = cfg?.getDeckBabes?.() || [];
+            const moved = deckNow.filter(b => ids.has(b.id));
             if (moved.length) {
+              cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !ids.has(b.id)));
               setDiscard(d => {
                 const existing = new Set(d.babes.map(x => x.id));
                 const add = moved.filter(b => !existing.has(b.id));
                 return { ...d, babes: [...d.babes, ...add] };
               });
             }
-            return stay;
-          });
-        }
-        // If effect moved targets from discard to deck, move them back to discard
-        if (eff.onRemove?.undoDiscardedTargets && (eff as any).boundDiscards?.babeIds?.length) {
-          const ids = new Set((eff as any).boundDiscards.babeIds as string[]);
-          const deckNow = cfg?.getDeckBabes?.() || [];
-          const moved = deckNow.filter(b => ids.has(b.id));
-          if (moved.length) {
-            cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !ids.has(b.id)));
-            setDiscard(d => {
-              const existing = new Set(d.babes.map(x => x.id));
-              const add = moved.filter(b => !existing.has(b.id));
-              return { ...d, babes: [...d.babes, ...add] };
-            });
           }
-        }
-        // If effect moved list items between deck and discard (e.g., Babe Swap), revert those moves
-        const listSwaps = (eff as any).listSwaps as { deckToDiscardIds?: string[]; discardToDeckIds?: string[] } | undefined;
-        if (listSwaps) {
-          const toDeck = listSwaps.deckToDiscardIds || [];
-          const toDiscard = listSwaps.discardToDeckIds || [];
-          if (toDeck.length) {
-            setDiscard(d => {
-              const keep = d.babes.filter(b => !toDeck.includes(b.id));
-              const moved = d.babes.filter(b => toDeck.includes(b.id));
-              if (moved.length) {
-                cfg?.setDeckBabes(prevDeck => {
-                  const existing = new Set(prevDeck.map(x => x.id));
-                  const add = moved.filter(b => !existing.has(b.id));
-                  return [...prevDeck, ...add];
-                });
-              }
-              return { ...d, babes: keep };
-            });
-          }
-          if (toDiscard.length) {
-            const deckNow2 = cfg?.getDeckBabes?.() || [];
-            const moved2 = deckNow2.filter(b => toDiscard.includes(b.id));
-            if (moved2.length) {
-              cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !toDiscard.includes(b.id)));
+          // If effect moved list items between deck and discard (e.g., Babe Swap), revert those moves
+          const listSwaps = (effToRevert as any).listSwaps as { deckToDiscardIds?: string[]; discardToDeckIds?: string[] } | undefined;
+          if (listSwaps) {
+            const toDeck = listSwaps.deckToDiscardIds || [];
+            const toDiscard = listSwaps.discardToDeckIds || [];
+            if (toDeck.length) {
               setDiscard(d => {
-                const existing = new Set(d.babes.map(x => x.id));
-                const add = moved2.filter(b => !existing.has(b.id));
-                return { ...d, babes: [...d.babes, ...add] };
+                const keep = d.babes.filter(b => !toDeck.includes(b.id));
+                const moved = d.babes.filter(b => toDeck.includes(b.id));
+                if (moved.length) {
+                  cfg?.setDeckBabes(prevDeck => {
+                    const existing = new Set(prevDeck.map(x => x.id));
+                    const add = moved.filter(b => !existing.has(b.id));
+                    return [...prevDeck, ...add];
+                  });
+                }
+                return { ...d, babes: keep };
               });
             }
+            if (toDiscard.length) {
+              const deckNow2 = cfg?.getDeckBabes?.() || [];
+              const moved2 = deckNow2.filter(b => toDiscard.includes(b.id));
+              if (moved2.length) {
+                cfg?.setDeckBabes?.(prevDeck => prevDeck.filter(b => !toDiscard.includes(b.id)));
+                setDiscard(d => {
+                  const existing = new Set(d.babes.map(x => x.id));
+                  const add = moved2.filter(b => !existing.has(b.id));
+                  return { ...d, babes: [...d.babes, ...add] };
+                });
+              }
+            }
+          }
+          // Back to deck: restore pristine script if captured; otherwise, strip bound-only fields
+          const restore: EffectScript | undefined = effectOriginalById[effToRevert.id];
+          if (restore) {
+            deckAddEffect(restore);
+            setEffectOriginalById(map => { const { [effToRevert.id]: _, ...rest } = map; return rest; });
+          } else {
+            const { playId: _p, boundTargetIds: _bt, boundTargetType: _btt, boundDiscards: _bd, boundPlayedFromDiscard: _bpfd, strokeCost: _sc, dynamicStrokeTargetId: _dstid, dynamicStrokeKind: _dsk, listSwaps: _ls, ...rest } = effToRevert as any;
+            deckAddEffect(rest as EffectScript);
+          }
+        };
+
+        // Build next by removing all grouped ids
+        let next = prev.slice();
+        for (const pid of Array.from(groupIds)) {
+          const j = next.findIndex(x => x.playId === pid);
+          if (j !== -1) {
+            const rm = next[j];
+            revertOne(rm);
+            next.splice(j, 1);
           }
         }
-        // Back to deck: restore pristine script if captured; otherwise, strip bound-only fields
-        const restore: EffectScript | undefined = effectOriginalById[eff.id];
-        if (restore) {
-          deckAddEffect(restore);
-          setEffectOriginalById(map => { const { [eff.id]: _, ...rest } = map; return rest; });
-        } else {
-          const {
-            playId: _playId,
-            boundTargetIds: _bt,
-            boundTargetType: _btt,
-            boundDiscards: _bd,
-            boundPlayedFromDiscard: _bpfd,
-            strokeCost: _sc,
-            dynamicStrokeTargetId: _dstid,
-            dynamicStrokeKind: _dsk,
-            listSwaps: _ls,
-            ...rest
-          } = eff as any;
-          deckAddEffect(rest as EffectScript);
-        }
-        const next = prev.slice();
-        next.splice(ix, 1);
 
         // Recompute dynamic stroke costs (e.g., Sun Dress) for remaining effects
         try {
@@ -441,6 +479,14 @@ export function useTurn(cfg?: TurnApiConfig) {
     setPlayedFromPendingNextIds([]);
     // Clear captured originals
     setEffectOriginalById({});
+    // If we consumed the double-play flag this turn, restore it so it can be used again
+    setPendingNext(p => {
+      if (!doublePlayConsumedThisTurn) return p;
+      const base: any = p ? { ...p } : {};
+      base.doublePlayEffectNext = true;
+      return base;
+    });
+    setDoublePlayConsumedThisTurn(false);
   }, [deckAddBabe, deckAddEffect, playedFromDiscardIds, playedFromDiscardImmediateIds, effectOriginalById]);
 
   const endTurn = useCallback(() => {
@@ -556,9 +602,7 @@ export function useTurn(cfg?: TurnApiConfig) {
     const totalCards = playedBabes.length + playedEffects.length;
     const nextEffects = playedEffects.map((pe: any) => {
       if (pe?.dynamicStrokeKind === 'per-turn-cards' || pe?.name === 'Pillow Humping') {
-        const baseDesired = 30 * totalCards;
-        const surcharge = (pe?.surchargeApplied as number) || 0;
-        const desired = baseDesired + surcharge;
+        const desired = 30 * totalCards; // base dynamic only; surcharge added globally below
         const current = typeof pe.strokeCost === 'number' ? pe.strokeCost : 0;
         if (current !== desired) {
           changed = true;
@@ -569,9 +613,12 @@ export function useTurn(cfg?: TurnApiConfig) {
     });
     const list = (changed ? nextEffects : playedEffects) as any[];
     if (changed) setPlayedEffects(list as BoundEffect[]);
-    const totalCharges = list.reduce((sum, e: any) => sum + (typeof e?.strokeCost === 'number' ? e.strokeCost : 0), 0);
-    setStrokesThisTurn(totalCharges);
-  }, [playedBabes, playedEffects]);
+    // Sum base stroke costs and then add Executive Orders surcharge globally per effect (excluding EO itself)
+    const baseTotal = list.reduce((sum, e: any) => sum + (typeof e?.strokeCost === 'number' ? e.strokeCost : 0), 0);
+    const effectCountForSurcharge = list.filter((e: any) => (e?.name !== 'Executive Orders')).length;
+    const surchargeTotal = (effectSurchargePerPlay > 0 ? effectSurchargePerPlay * effectCountForSurcharge : 0);
+    setStrokesThisTurn(baseTotal + surchargeTotal);
+  }, [playedBabes, playedEffects, effectSurchargePerPlay]);
 
   return {
     // state
@@ -579,6 +626,7 @@ export function useTurn(cfg?: TurnApiConfig) {
     strokesThisTurn,
     pendingNext,
     cuckedPlayedThisGame,
+    cartoonLogicPlayedThisGame,
     playedBabes,
     playedEffects,
     discard, // { babes: BabeCard[]; effects: EffectScript[] }
@@ -611,5 +659,6 @@ export function useTurn(cfg?: TurnApiConfig) {
     effectSurchargePerPlay,
     addEffectSurcharge: (n: number) => setEffectSurchargePerPlay(v => Math.max(0, v + n)),
     setCuckedPlayedThisGame,
+    setCartoonLogicPlayedThisGame,
   };
 }

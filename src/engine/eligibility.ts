@@ -50,6 +50,12 @@ export function checkEligibility(effect: BoundEffect | Omit<BoundEffect,"playId"
       return { ok: false, reason: "Requires Blake Blossom played this turn." };
     }
   }
+  if ((effect as any).name === "Tangled Up Inside") {
+    const hasRapunzel = state.playedBabes.some(b => (b.name || "").toUpperCase().startsWith("RAPUNZEL"));
+    if (!hasRapunzel) {
+      return { ok: false, reason: "Requires Rapunzel played this turn." };
+    }
+  }
 
   if (effect.requires) {
     for (const r of effect.requires) {

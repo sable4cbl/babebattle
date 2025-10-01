@@ -102,6 +102,9 @@ export type FutureBuff = {
 
   ignoreBabeLimitNext?: true;
 
+  // Next turn: allow playing one Effect card twice (UI/turn logic consumes this)
+  doublePlayEffectNext?: true;
+
   // Apply a multiplier to any targeted babe(s) next turn, if played
   targetsNextTurnMult?: number;
 
@@ -195,6 +198,8 @@ export type PendingNext = {
   // Total strokes paid for effects in the previous turn
   effectStrokesLastTurn?: number;
 
+  // Next turn flag: can play one Effect card twice (consumer clears after use)
+  doublePlayEffectNext?: boolean;
 };
 
 

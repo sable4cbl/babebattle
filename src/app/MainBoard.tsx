@@ -22,6 +22,8 @@ type Props = {
 export default function MainBoard({ deck, setDeck }: Props) {
   const [targetingEffect, setTargetingEffect] = useState<EffectScript | null>(null);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
+  // When doubling an effect like "69", mark the second run as free so it won't count vs limit
+  const [freeNext69, setFreeNext69] = useState(false);
   const [babeQuery, setBabeQuery] = useState("");
   const [effectQuery, setEffectQuery] = useState("");
   const [babeCompact, setBabeCompact] = useState(false);
@@ -72,7 +74,12 @@ export default function MainBoard({ deck, setDeck }: Props) {
     // Helper: finalize current selection for effect "69"
     const finalize69 = (selIds: string[]) => {
       if (!targetingEffect || targetingEffect.name !== "69" || selIds.length === 0) return;
-      const bound = { ...(targetingEffect as any), playId: uid(), boundTargetIds: selIds } as unknown as BoundEffect;
+      const effectScript = targetingEffect; // keep a handle for potential second run
+      const preDouble = !!turn.pendingNext?.doublePlayEffectNext;
+      const bound = { ...(effectScript as any), playId: uid(), boundTargetIds: selIds } as unknown as BoundEffect;
+      if (freeNext69) {
+        (bound as any).freeEffect = true;
+      }
       // Record list move so reset/remove can revert deck<->discard transitions
       (bound as any).listSwaps = { deckToDiscardIds: selIds.slice() };
       // Move selected from deck to discard
@@ -80,7 +87,7 @@ export default function MainBoard({ deck, setDeck }: Props) {
       // Add +9 per selected
       const addAmt = selIds.length * 9;
       (bound as any).score = [
-        ...(((targetingEffect as any).score || []) as any[]),
+        ...(((effectScript as any).score || []) as any[]),
         { scope: "final", op: "add", amount: addAmt },
       ];
       // Optional pay to triple
@@ -94,8 +101,18 @@ export default function MainBoard({ deck, setDeck }: Props) {
         ];
       }
       (turn as any).playBoundEffect(bound);
-      setTargetingEffect(null);
-      setSelectedTargets([]);
+      if (preDouble) {
+        // Run a second 69: clear selection and prompt again with the same effect
+        setSelectedTargets([]);
+        setTargetingEffect(effectScript);
+        // Mark the next run as a free effect so it won't count vs limit
+        setFreeNext69(true);
+      } else {
+        setTargetingEffect(null);
+        setSelectedTargets([]);
+        // Clear any leftover flag
+        if (freeNext69) setFreeNext69(false);
+      }
     };
 
   // Keep your previous mapping for PlayArea visual keys
@@ -212,6 +229,7 @@ export default function MainBoard({ deck, setDeck }: Props) {
               playedEffects={turn.playedEffects as any}
               limits={limits}
               targetingEffectName={targetingEffect?.name || undefined}
+              effectSurchargePerPlay={(turn as any).effectSurchargePerPlay}
               onRemoveBabe={(id: string) => turn.removePlayedBabe(id)}
               onRemoveEffect={(id: string) => turn.removePlayedEffect(id)}
               onBindEffect={(babeId: string) => {
@@ -367,8 +385,12 @@ export default function MainBoard({ deck, setDeck }: Props) {
               playedHistoryBabeNames: (turn as any).playedHistoryBabeNames,
               cuckedPlayedThisGame: (turn as any).cuckedPlayedThisGame,
             };
+            // Once per game gating for Cartoon Logic
+            if ((e as any).name === 'Cartoon Logic' && (turn as any).cartoonLogicPlayedThisGame) {
+              return { disabled: true, reason: 'You already played Cartoon Logic this game.' };
+            }
             const elig = checkEligibility({ ...(e as any), playId: "tmp" }, stateForElig as any);
-            const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes';
+            const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes' || !!((e as any)?.limits?.some?.((m: any) => m?.ignoreEffectLimit));
             // If Cucked is in play, disallow all other effects
             if ((turn.playedEffects as any[])?.some?.(pe => (pe as any).name === 'Cucked') && (e as any).name !== 'Cucked') {
               return { disabled: true, reason: "Cucked: no other cards this turn" };
@@ -387,8 +409,10 @@ export default function MainBoard({ deck, setDeck }: Props) {
               playedHistoryBabeNames: (turn as any).playedHistoryBabeNames,
               cuckedPlayedThisGame: (turn as any).cuckedPlayedThisGame,
             };
+            // Once per game gating for Cartoon Logic
+            if ((e as any).name === 'Cartoon Logic' && (turn as any).cartoonLogicPlayedThisGame) return;
             const elig = checkEligibility({ ...(e as any), playId: "tmp" }, stateForElig as any);
-            const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes';
+            const ignoreLimitForThisCard = (e as any)?.name === 'Jeanie Wishes' || !!((e as any)?.limits?.some?.((m: any) => m?.ignoreEffectLimit));
             if ((!canPlayEffect && !ignoreLimitForThisCard) || !elig.ok) return;
             if (e.target.kind === "none") {
               if (e.name === "Wilde Card") {

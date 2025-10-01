@@ -1,0 +1,37 @@
+import type { BabeCard } from "../../types/cards";
+import { uid } from "../../utils/uid";
+
+export const PAWG_BABES: BabeCard[] = [
+  { id: uid(), name: "Violet Myers CHAMPION", type: "PAWG", baseScore: 10, gifName: "PAWG Violet Myers Champion.gif" },
+  { id: uid(), name: "Pufffypink CHAMPION", type: "PAWG", baseScore: 10, gifName: "PAWG Pufffypink Champion.gif" },
+  { id: uid(), name: "Jolie Becker", type: "PAWG", baseScore: 8, gifName: "PAWG Jolie Becker.gif" },
+  { id: uid(), name: "Allison Parker", type: "PAWG", baseScore: 6, gifName: "PAWG Allison Parker.gif" },
+  { id: uid(), name: "Alexis Texas GOLD", type: "PAWG", baseScore: 9, gifName: "PAWG Alexis Texas Gold.gif" },
+  { id: uid(), name: "Mia Malkova", type: "PAWG", baseScore: 7, gifName: "PAWG Mia Malkova.gif" },
+  { id: uid(), name: "Ashley Alban", type: "PAWG", baseScore: 7, gifName: "PAWG Ashley Alban.gif" },
+  { id: uid(), name: "Crystal Lust", type: "PAWG", baseScore: 7, gifName: "PAWG Crystal Lust.gif" },
+  { id: uid(), name: "Dani Daniels", type: "PAWG", baseScore: 6, gifName: "PAWG Dani Daniels.gif" },
+  { id: uid(), name: "DemonMika", type: "PAWG", baseScore: 8, gifName: "PAWG DemonMika.gif" },
+  { id: uid(), name: "Emily Rinaudo", type: "PAWG", baseScore: 6, gifName: "PAWG Emily Rinaudo.gif" },
+  { id: uid(), name: "Emma Magnolia", type: "PAWG", baseScore: 7, gifName: "PAWG Emma Magnolia.gif" },
+  { id: uid(), name: "Imogen Lucie", type: "PAWG", baseScore: 7, gifName: "PAWG Imogen Lucie.gif" },
+  { id: uid(), name: "Kelsi Monroe", type: "PAWG", baseScore: 8, gifName: "PAWG Kelsi Monroe.gif" },
+  { id: uid(), name: "Kelsi Monroe GOLD", type: "PAWG", baseScore: 9, gifName: "PAWG Kelsi Monroe Gold.gif" },
+  { id: uid(), name: "Liliana Hearts", type: "PAWG", baseScore: 8, gifName: "PAWG Liliana Hearts.gif" },
+  { id: uid(), name: "Jada Stevens", type: "PAWG", baseScore: 7, gifName: "PAWG Jada Stevens.gif" },
+  { id: uid(), name: "Halohals", type: "PAWG", baseScore: 6, gifName: "PAWG Halohals.gif" },
+  { id: uid(), name: "Gia Paige", type: "PAWG", baseScore: 7, gifName: "PAWG Gia Paige.gif" },
+  { id: uid(), name: "Cutefruit18", type: "PAWG", baseScore: 7, gifName: "PAWG Cutefruit18.gif" },
+  { id: uid(), name: "Anja Dee", type: "PAWG", baseScore: 7, gifName: "PAWG Anja Dee.gif" },
+  { id: uid(), name: "LiquidCandy2000", type: "PAWG", baseScore: 6, gifName: "PAWG LiquidCandy2000.gif" },
+  { id: uid(), name: "Madison Moore", type: "PAWG", baseScore: 6, gifName: "PAWG Madison Moore.gif" },
+  { id: uid(), name: "Mandy Muse", type: "PAWG", baseScore: 6, gifName: "PAWG Mandy Muse.gif" },
+  { id: uid(), name: "Miss Jayne", type: "PAWG", baseScore: 6, gifName: "PAWG Miss Jayne.gif" },
+  { id: uid(), name: "Often Elle", type: "PAWG", baseScore: 7, gifName: "PAWG Often Elle.gif" },
+  { id: uid(), name: "Tommy King", type: "PAWG", baseScore: 8, gifName: "PAWG Tommy King.gif" },
+  { id: uid(), name: "Urthickpersiangf", type: "PAWG", baseScore: 8, gifName: "PAWG Urthickpersiangf.gif" },
+  { id: uid(), name: "Victoria Cakes", type: "PAWG", baseScore: 8, gifName: "PAWG Victoria Cakes.gif" },
+  { id: uid(), name: "Violet Myers", type: "PAWG", baseScore: 8, gifName: "PAWG Violet Myers.gif" },
+  { id: uid(), name: "Willow Ryder", type: "PAWG", baseScore: 7, gifName: "PAWG Willow Ryder.gif" },
+];
+

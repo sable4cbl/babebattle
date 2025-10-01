@@ -39,6 +39,20 @@ export function computeScore(state: EngineState): EngineResult {
     if (!e.score || e.score.length === 0) continue;
 
     for (const op of e.score) {
+      // Special case: Cartoon Logic — set chosen WESTERN babe's base to 15 this turn
+      if (e.name === "Cartoon Logic") {
+        const ids = new Set(e.boundTargetIds ?? []);
+        if (ids.size) {
+          for (const b of perBabe) {
+            if (ids.has(b.id)) {
+              b.base = 15;
+            }
+          }
+          final = perBabe.reduce((a, x) => a + x.total, 0);
+          log.push(`${e.name}: set base to 15`);
+        }
+        // Continue processing other ops normally
+      }
       // Special case: Blooming Blossom — if Blake Blossom was played this turn, triple her
       if (
         e.name === "Blooming Blossom" &&
@@ -51,6 +65,19 @@ export function computeScore(state: EngineState): EngineResult {
           final = score.perBabe.reduce((a,x)=>a+x.total,0);
         }
         continue;
+      }
+      // Special case: Full Interface — if Cortana was played this turn, double her
+      if (
+        e.name === "Full Interface" &&
+        (op as any)?.scope === "babe"
+      ) {
+        const targets = score.perBabe.filter(b => (b.name || "").toUpperCase().startsWith("CORTANA"));
+        if (targets.length > 0) {
+          for (const t of targets) t.mult *= 2;
+          log.push(`${e.name}: x2 → ${targets.map(t=>t.name).join(", ")}`);
+          final = score.perBabe.reduce((a,x)=>a+x.total,0);
+        }
+        // Note: allow other ops to proceed too
       }
       // Special case: Late Bloomer conditional triple (only if Emily Bloom is the only babe played)
       if (
@@ -214,6 +241,7 @@ function collectNextPending(
   const addNextNextSources: Array<{ name: string; amount: number }> = [];
   const multNextSources: Array<{ name: string; mult: number }> = [];
   let effectStrokesLastTurn = 0;
+  let doublePlayEffectNext = false;
   for (const e of effects) {
     const f = e.future; if (!f) continue;
     if (typeof f.nextAdd === "number") { add += f.nextAdd; addNextSources.push({ name: e.name, amount: f.nextAdd }); log.push(`${e.name}: next +${f.nextAdd}`); }
@@ -244,6 +272,10 @@ function collectNextPending(
       replay = replay.concat(e.boundTargetIds);
     }
     if (f.ignoreBabeLimitNext) ignoreLimit = true;
+    if ((f as any).doublePlayEffectNext) {
+      doublePlayEffectNext = true;
+      log.push(`${e.name}: next play 1 Effect twice`);
+    }
     if (typeof f.targetsNextTurnMult === "number" && e.boundTargetIds && e.boundTargetIds.length) {
       for (const id of e.boundTargetIds) babeMultNext[id] = f.targetsNextTurnMult;
       log.push(`${e.name}: next chosen target x${f.targetsNextTurnMult}`);
@@ -258,6 +290,7 @@ function collectNextPending(
     effectStrokesLastTurn = effects.reduce((s, e: any) => s + (typeof e?.strokeCost === 'number' ? e.strokeCost : 0), 0);
   } catch {}
   const payload: PendingNext = {};
+  if (doublePlayEffectNext) (payload as any).doublePlayEffectNext = true;
   if (add !== 0) payload.addNext = add;
   if (mult !== 1) payload.multNext = mult;
   if (effectStrokesLastTurn > 0) (payload as any).effectStrokesLastTurn = effectStrokesLastTurn;
@@ -270,9 +303,5 @@ function collectNextPending(
   if (multNextSources.length) (payload as any).multNextSources = multNextSources;
   return Object.keys(payload).length ? payload : undefined;
 }
-
-
-
-
 
 

@@ -1,0 +1,38 @@
+import type { BabeCard } from "../../types/cards";
+import { uid } from "../../utils/uid";
+
+export const GAME_BABES: BabeCard[] = [
+  { id: uid(), name: "Aerith Gainsborough", type: "GAME", baseScore: 7, gifName: "GAME Aerith Gainsborough.gif" },
+  { id: uid(), name: "Alcina Dimitrescu", type: "GAME", baseScore: 8, gifName: "GAME Alcina Dimitrescu.gif" },
+  { id: uid(), name: "Alexstrasza", type: "GAME", baseScore: 7, gifName: "GAME Alexstrasza.gif" },
+  { id: uid(), name: "Byleth", type: "GAME", baseScore: 8, gifName: "GAME Byleth.gif" },
+  { id: uid(), name: "Cindy Aurum", type: "GAME", baseScore: 6, gifName: "GAME Cindy Aurum.gif" },
+  { id: uid(), name: "Ciri", type: "GAME", baseScore: 8, gifName: "GAME Ciri.gif" },
+  { id: uid(), name: "Commander Shepard Vaulted", type: "GAME", baseScore: 10, gifName: "GAME Commander Shepard Vaulted.gif" },
+  { id: uid(), name: "Cortana", type: "GAME", baseScore: 6, gifName: "GAME Cortana.gif" },
+  { id: uid(), name: "EDI", type: "GAME", baseScore: 6, gifName: "GAME EDI.gif" },
+  { id: uid(), name: "Elizabeth Comstock", type: "GAME", baseScore: 8, gifName: "GAME Elizabeth Comstock.gif" },
+  { id: uid(), name: "Felicia", type: "GAME", baseScore: 7, gifName: "GAME Felicia.gif" },
+  { id: uid(), name: "Jaina Proudmoore", type: "GAME", baseScore: 8, gifName: "GAME Jaina Proudmoore.gif" },
+  { id: uid(), name: "Lara Croft", type: "GAME", baseScore: 8, gifName: "GAME Lara Croft.gif" },
+  { id: uid(), name: "Lisa", type: "GAME", baseScore: 8, gifName: "GAME Lisa.gif" },
+  { id: uid(), name: "Mad Moxxi", type: "GAME", baseScore: 8, gifName: "GAME Mad Moxxi.gif" },
+  { id: uid(), name: "Marie Rose", type: "GAME", baseScore: 7, gifName: "GAME Marie Rose.gif" },
+  { id: uid(), name: "Melina", type: "GAME", baseScore: 6, gifName: "GAME Melina.gif" },
+  { id: uid(), name: "Miranda Lawson", type: "GAME", baseScore: 8, gifName: "GAME Miranda Lawson.gif" },
+  { id: uid(), name: "Morrigan Aensland", type: "GAME", baseScore: 8, gifName: "GAME Morrigan Aensland.gif" },
+  { id: uid(), name: "Mythra", type: "GAME", baseScore: 7, gifName: "GAME Mythra.gif" },
+  { id: uid(), name: "Pauline", type: "GAME", baseScore: 6, gifName: "GAME Pauline.gif" },
+  { id: uid(), name: "Princess Daisy", type: "GAME", baseScore: 7, gifName: "GAME Princess Daisy.gif" },
+  { id: uid(), name: "Princess Peach", type: "GAME", baseScore: 8, gifName: "GAME Princess Peach.gif" },
+  { id: uid(), name: "Princess Rosalina", type: "GAME", baseScore: 7, gifName: "GAME Princess Rosalina.gif" },
+  { id: uid(), name: "Princess Zelda", type: "GAME", baseScore: 8, gifName: "GAME Princess Zelda.gif" },
+  { id: uid(), name: "Pyra", type: "GAME", baseScore: 8, gifName: "GAME Pyra.gif" },
+  { id: uid(), name: "Ranni The Witch", type: "GAME", baseScore: 7, gifName: "GAME Ranni The Witch.gif" },
+  { id: uid(), name: "Sylvanas Windrunner", type: "GAME", baseScore: 7, gifName: "GAME Sylvanas Windrunner.gif" },
+  { id: uid(), name: "Tifa Lockhart", type: "GAME", baseScore: 8, gifName: "GAME Tifa Lockhart.gif" },
+  { id: uid(), name: "Triss", type: "GAME", baseScore: 6, gifName: "GAME Triss.gif" },
+  { id: uid(), name: "Yennefer", type: "GAME", baseScore: 7, gifName: "GAME Yennefer.gif" },
+  { id: uid(), name: "YoRHA 2B", type: "GAME", baseScore: 8, gifName: "GAME YoRHA 2B.gif" },
+];
+

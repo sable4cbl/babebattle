@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { BabeCard } from "../../types/cards";
 import type { EffectScript } from "../../types/effects";
-import { KNOWN_BABES, KNOWN_EFFECTS } from "../../data/catalog";
+import { KNOWN_BABES } from "../../data/babes.catalog";
+import { EFFECTS as KNOWN_EFFECTS } from "../../data/effects.catalog";
 
 export type RowStatus = "BABE" | "EFFECT" | "MISSING";
 

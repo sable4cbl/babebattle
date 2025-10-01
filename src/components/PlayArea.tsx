@@ -37,6 +37,7 @@ export type PlayAreaProps = {
   overallOps?: OverallOp[];
   limits?: Limits;
   targetingEffectName?: string;
+  effectSurchargePerPlay?: number;
 };
 
 // Legacy alias for editor tooling that may still refer to `Props`
@@ -73,6 +74,7 @@ export default function PlayArea({
   selectedTargetIds,
   scoreBreakdown,
   overallOps,
+  effectSurchargePerPlay,
 }: PlayAreaProps) {
   const [hoverUrl, setHoverUrl] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -163,6 +165,41 @@ export default function PlayArea({
           </div>
         </div>
       )}
+
+      {/* Strokes Breakdown */}
+      <div className="bg-gray-50 border rounded-md p-2 text-xs text-gray-700 mt-3">
+        <div className="font-semibold mb-1">Strokes Breakdown</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left align-middle">
+            <thead>
+              <tr className="text-gray-500">
+                <th className="pr-2 py-1">Effect</th>
+                <th className="pr-2 py-1">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(playedEffects as any[]).map((pe: any) => (
+                <tr key={pe.playId} className="border-t">
+                  <td className="pr-2 py-1 whitespace-nowrap">{pe.name}</td>
+                  <td className="pr-2 py-1">{typeof pe.strokeCost === 'number' ? pe.strokeCost : 0}</td>
+                </tr>
+              ))}
+              {effectSurchargePerPlay && effectSurchargePerPlay > 0 && (
+                <tr className="border-t">
+                  <td className="pr-2 py-1 whitespace-nowrap">Executive Orders surcharge</td>
+                  <td className="pr-2 py-1">
+                    {effectSurchargePerPlay * ((playedEffects as any[]).filter((e: any) => e?.name !== 'Executive Orders').length)}
+                  </td>
+                </tr>
+              )}
+              <tr className="border-t font-semibold">
+                <td className="pr-2 py-1 text-gray-700">Total</td>
+                <td className="pr-2 py-1 font-semibold">{strokesThisTurn}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <BabesInPlay
         playedBabes={playedBabes}
